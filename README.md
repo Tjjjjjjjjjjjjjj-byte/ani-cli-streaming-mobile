@@ -6,7 +6,7 @@ and is installed as a PWA from Chrome. Nothing is deployed and nothing needs a P
 ## Setup (Termux, once)
 
     pkg install -y git
-    git clone <this repo> ~/anime && cd ~/anime
+    git clone https://github.com/Tjjjjjjjjjjjjjj-byte/ani-cli-streaming-mobile ~/anime && cd ~/anime
     bash termux/install.sh
     bash termux/start.sh
 
