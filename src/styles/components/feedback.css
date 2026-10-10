@@ -1,0 +1,169 @@
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.scroll-text {
+  max-height: 9.5em;
+  padding-right: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.scroll-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.sk {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0.06) 25%,
+    rgb(255 255 255 / 0.15) 50%,
+    rgb(255 255 255 / 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s linear infinite;
+}
+
+.sk--line {
+  width: 100%;
+  height: 12px;
+}
+
+.sk--w25 { width: 25%; }
+.sk--w40 { width: 40%; }
+.sk--w60 { width: 60%; }
+
+.sk--num {
+  justify-self: center;
+  width: 22px;
+  height: 22px;
+}
+
+.sk--thumb {
+  width: 144px;
+  aspect-ratio: 16 / 9;
+}
+
+.sk--poster {
+  aspect-ratio: 2 / 3;
+  border-radius: 10px;
+}
+
+.sk--song {
+  height: 54px;
+  border-radius: 8px;
+  animation-delay: calc(var(--i, 0) * 120ms);
+}
+
+@keyframes sk-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.ring {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--accent);
+}
+
+.ring svg {
+  display: block;
+}
+
+.ring__track {
+  fill: none;
+  stroke: var(--line);
+}
+
+.ring__bar {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s ease;
+}
+
+.ring.is-spinning svg {
+  animation: watch-spin 1s linear infinite;
+}
+
+.ring--done { color: #7be0a0; }
+.ring--error { color: #ff6b6b; }
+
+.ring__center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ring--done .ring__center,
+.ring--error .ring__center {
+  color: inherit;
+}
+
+.ring__center .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.dl-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  animation: tab-fade 0.3s ease both;
+}
+
+.dl-status__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+.dl-status__label {
+  font-weight: 650;
+}
+
+.dl-status__link {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.dl-status__error {
+  color: #ff9b9b;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk,
+  .dl-status {
+    animation: none;
+  }
+
+  .ring__bar {
+    transition: none;
+  }
+}
