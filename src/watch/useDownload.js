@@ -68,3 +68,10 @@ export function useDownload(animeId, lang) {
     (episodes) => startAll(animeId, episodes, lang),
   ];
 }
+
+// The whole queue (for the Downloads screen, the navbar badge and auto-download).
+export function useDownloadQueue() {
+  const context = useContext(DownloadContext);
+  if (!context) throw new Error("useDownloadQueue needs a <DownloadProvider> above it.");
+  return context;
+}

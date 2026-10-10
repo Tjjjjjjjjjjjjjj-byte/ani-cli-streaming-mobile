@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { STANDALONE } from "../api";
 import { IMPORT_EVENT } from "../library/useLibrary";
+import { DownloadContext } from "../watch/useDownload";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ function Navbar() {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
   const [searchInput, setSearchInput] = useState(params.get("q") ?? "");
+  const pending = useContext(DownloadContext)?.pending ?? 0;
 
   function handleSearch(e) {
     e.preventDefault();
@@ -82,6 +84,9 @@ function Navbar() {
             setTimeout(() => window.dispatchEvent(new CustomEvent(IMPORT_EVENT, { detail: file })), 0);
           }}
         />
+        <button className="icon-btn" type="button" aria-label="Settings" onClick={() => navigate("/settings")}>
+          <span className="material-symbols-outlined">settings</span>
+        </button>
       </nav>
     );
   }
@@ -111,8 +116,20 @@ function Navbar() {
         />
       </form>
 
-      <button className="icon-btn downloads" type="button" aria-label="Downloads" onClick={() => navigate("/downloads")}>
+      <button className="icon-btn" type="button" aria-label="My list" onClick={() => navigate("/list")}>
+        <span className="material-symbols-outlined">bookmarks</span>
+      </button>
+      <button
+        className="icon-btn downloads"
+        type="button"
+        aria-label={pending > 0 ? `Downloads, ${pending} in progress` : "Downloads"}
+        onClick={() => navigate("/downloads")}
+      >
         <span className="material-symbols-outlined">download</span>
+        {pending > 0 && <span className="icon-btn__badge">{pending}</span>}
+      </button>
+      <button className="icon-btn" type="button" aria-label="Settings" onClick={() => navigate("/settings")}>
+        <span className="material-symbols-outlined">settings</span>
       </button>
     </nav>
   );

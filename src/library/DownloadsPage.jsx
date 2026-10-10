@@ -1,11 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { STANDALONE, assetUrl } from "../api";
 import { FORMAT_LABELS, formatBytes } from "../utils/animeFormat";
 import { IMPORT_EVENT, importZip, useLibrary } from "./useLibrary";
+import DownloadQueue from "./DownloadQueue";
+import { DownloadContext } from "../watch/useDownload";
+import StorageMeter from "./StorageMeter";
 
 function DownloadsPage() {
   const [library, reload] = useLibrary();
+  // The queue finished an episode: refresh the grid and the storage meter.
+  const libraryVersion = useContext(DownloadContext)?.libraryVersion ?? 0;
+  useEffect(() => {
+    if (libraryVersion > 0) reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraryVersion]);
   const [params] = useSearchParams();
   const q = params.get("q")?.trim() ?? "";
   const inputRef = useRef(null);
@@ -68,6 +77,9 @@ function DownloadsPage() {
               : "Saved on this phone, ready to watch without streaming."}
         </p>
       </header>
+
+      {!STANDALONE && <DownloadQueue />}
+      {library.status === "ready" && library.items.length > 0 && <StorageMeter items={library.items} />}
 
       <div
         className={`dropzone${dragging ? " is-dragging" : ""}`}

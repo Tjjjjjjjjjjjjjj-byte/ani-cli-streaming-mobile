@@ -1,3 +1,4 @@
+import { getSettings } from "../store/settings";
 import {
   FORMAT_LABELS,
   SEARCH_FORMATS,
@@ -35,7 +36,7 @@ function SearchFilters({ values, hasTerm, onChange, onClear }) {
     <form className="filters" aria-label="Filter results" onSubmit={(e) => e.preventDefault()}>
       <FilterSelect label="Genre" icon="category" value={values.genre} onChange={(v) => onChange("genre", v)}>
         <option value="">Any genre</option>
-        {SEARCH_GENRES.map((g) => (
+        {(getSettings().allowAdult ? [...SEARCH_GENRES, "Hentai"] : SEARCH_GENRES).map((g) => (
           <option key={g} value={g}>
             {g}
           </option>

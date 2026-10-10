@@ -1,0 +1,27 @@
+@import "./tokens.css";
+@import "./base.css";
+@import "./layout.css";
+
+@import "./components/navbar.css";
+@import "./components/anime-card.css";
+@import "./components/pagination.css";
+@import "./components/button.css";
+@import "./components/player.css";
+@import "./components/watch.css";
+@import "./components/episodes.css";
+@import "./components/feedback.css";
+@import "./components/player-extras.css";
+@import "./components/continue.css";
+@import "./components/queue.css";
+
+@import "./pages/discover.css";
+@import "./pages/search.css";
+@import "./pages/anime.css";
+@import "./pages/watch-page.css";
+@import "./pages/downloads.css";
+@import "./pages/watchlist.css";
+@import "./pages/settings.css";
+
+@import "./motion.css";
+
+@import "./mobile.css";

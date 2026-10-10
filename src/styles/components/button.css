@@ -66,3 +66,17 @@
     transition: none;
   }
 }
+
+.btn--danger {
+  background: #ff6b6b;
+  color: #1a0b0b;
+}
+
+.btn--danger:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

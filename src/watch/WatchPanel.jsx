@@ -20,6 +20,12 @@ function WatchPanel({
   onWatched,
   detail = null,
   infoLoading = false,
+  startAt = 0,
+  initialSpeed = 1,
+  onSpeedChange,
+  subSize = null,
+  onSubSize,
+  onProgress,
 }) {
   const [prefs, togglePref] = usePlayerPrefs();
   const downloadBusy = download.status === "starting" || download.status === "running";
@@ -29,10 +35,6 @@ function WatchPanel({
   const canPrev = episode > 1;
   const canNext = totalEpisodes == null || episode < totalEpisodes;
   const aired = formatAired(detail?.aired);
-
-  function handleEnded() {
-    if (prefs.autoNext && canNext) onSelectEpisode(episode + 1);
-  }
 
   return (
     <section className="watch" aria-live="polite">
@@ -68,8 +70,16 @@ function WatchPanel({
             skipTimes={skipTimes}
             autoSkip={prefs.autoSkip}
             autoPlay={prefs.autoPlay}
-            onEnded={handleEnded}
             onWatched={onWatched}
+            startAt={startAt}
+            initialSpeed={initialSpeed}
+            onSpeedChange={onSpeedChange}
+            subSize={subSize}
+            onSubSize={onSubSize}
+            onProgress={onProgress}
+            nextEpisode={canNext ? episode + 1 : null}
+            onNext={() => onSelectEpisode(episode + 1)}
+            autoNext={prefs.autoNext}
           />
         )}
       </div>
@@ -97,7 +107,7 @@ function WatchPanel({
           <button
             type="button"
             className="toggle"
-            disabled={downloadBusy || loading}
+            disabled={loading}
             onClick={() => onDownload([episode])}
           >
             {downloadBusy ? (

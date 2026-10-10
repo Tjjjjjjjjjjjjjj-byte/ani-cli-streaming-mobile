@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { useSettings, vibrate } from "./store/settings";
 
 const SKIP_SECONDS = 10;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const DOUBLE_TAP_MS = 300;
 const STREAK_MS = 600;
 const FLASH_MS = 700;
+const HOLD_MS = 450;
+const HOLD_SPEED = 2;
+const MIN_RESUME_SECONDS = 15;
+const PROGRESS_EVERY_MS = 5000;
+const SUB_SIZES = [["small", "S"], ["medium", "M"], ["large", "L"], ["xlarge", "XL"]];
+const SUB_BACKGROUNDS = [[0, "None"], [0.4, "Soft"], [0.75, "Solid"]];
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+// WebVTT cues can carry styling tags and ASS leftovers like {\an8}; show plain text lines.
+const cleanCue = (text) => String(text).replace(/\{[^}]*\}/g, "").replace(/<[^>]+>/g, "").trim();
 
 const fullscreenElement = () => document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
 
@@ -32,7 +43,26 @@ function Icon({ name, filled = false }) {
   );
 }
 
-function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false, autoPlay = true, onEnded, onWatched }) {
+function Player({
+  src,
+  kind = "hls",
+  subtitles,
+  skipTimes = [],
+  autoSkip = false,
+  autoPlay = true,
+  onEnded,
+  onWatched,
+  startAt = 0,
+  initialSpeed = 1,
+  onSpeedChange,
+  subSize = null,
+  onSubSize,
+  onProgress,
+  nextEpisode = null,
+  onNext,
+  autoNext = false,
+}) {
+  const [settings, updateSettings] = useSettings();
   const wrapRef = useRef(null);
   const videoRef = useRef(null);
   const hideTimer = useRef(null);
@@ -44,6 +74,19 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
   const streak = useRef({ time: 0, side: null });
   const tapTimer = useRef(null);
   const flashTimer = useRef(null);
+  const trackRef = useRef(null);
+  const resumedRef = useRef(false);
+  const resumeTimer = useRef(null);
+  const holdTimer = useRef(null);
+  const hudTimer = useRef(null);
+  const gesture = useRef(null);
+  const suppressClick = useRef(false);
+  const lastKnown = useRef({ time: 0, duration: 0 });
+  const lastMedia = useRef(0);
+  const pendingDelta = useRef(0);
+  const lastFlush = useRef(0);
+  const onProgressRef = useRef(onProgress);
+  const onNextRef = useRef(onNext);
 
   const [failed, setFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -52,12 +95,63 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
   const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(initialSpeed);
   const [menuOpen, setMenuOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [started, setStarted] = useState(false);
   const [flash, setFlash] = useState(null);
+  const [cues, setCues] = useState([]);
+  const [resumeNote, setResumeNote] = useState(null);
+  const [endCard, setEndCard] = useState(null);
+  const [holding, setHolding] = useState(false);
+  const [brightness, setBrightness] = useState(1);
+  const [hud, setHud] = useState(null);
+
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+    onNextRef.current = onNext;
+  });
+
+  const shownSubSize = subSize ?? settings.subSize;
+
+  // Report where we are (for resume, "continue watching" and stats). Cheap, so called often.
+  const flushProgress = useCallback(() => {
+    const { time, duration: total } = lastKnown.current;
+    const delta = pendingDelta.current;
+    pendingDelta.current = 0;
+    lastFlush.current = Date.now();
+    if (time > 0 || delta > 0) onProgressRef.current?.({ time, duration: total, delta });
+  }, []);
+
+  useEffect(() => {
+    const onHide = () => document.visibilityState === "hidden" && flushProgress();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flushProgress);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flushProgress);
+      flushProgress();
+    };
+  }, [flushProgress]);
+
+  // Draw subtitles ourselves so size, background and position are adjustable.
+  useEffect(() => {
+    const track = trackRef.current?.track;
+    if (!track) return;
+    track.mode = "hidden";
+    const update = () =>
+      setCues(
+        Array.from(track.activeCues ?? [])
+          .map((c) => cleanCue(c.text))
+          .filter(Boolean),
+      );
+    track.addEventListener("cuechange", update);
+    return () => {
+      track.removeEventListener("cuechange", update);
+      setCues([]);
+    };
+  }, [subtitles]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -100,9 +194,24 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
       clearTimeout(hideTimer.current);
       clearTimeout(tapTimer.current);
       clearTimeout(flashTimer.current);
+      clearTimeout(resumeTimer.current);
+      clearTimeout(holdTimer.current);
+      clearTimeout(hudTimer.current);
     },
     [],
   );
+
+  // "Next episode in 5s": counts down after the episode ends, if there is a next one.
+  useEffect(() => {
+    if (!endCard || endCard.left == null || endCard.going) return;
+    if (endCard.left <= 0) {
+      setEndCard({ left: null, going: true });
+      onNextRef.current?.();
+      return;
+    }
+    const timer = setTimeout(() => setEndCard((c) => c && c.left != null && { ...c, left: c.left - 1 }), 1000);
+    return () => clearTimeout(timer);
+  }, [endCard]);
 
   const wake = useCallback(() => {
     setControlsVisible(true);
@@ -133,6 +242,7 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
     pointerType.current !== "mouse" || window.matchMedia("(pointer: coarse), (max-width: 700px)").matches;
 
   function showFlash(side) {
+    vibrate(8);
     setFlash((f) => ({
       id: f?.side === side ? f.id : Date.now(),
       side,
@@ -194,6 +304,12 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
     const time = e.currentTarget.currentTime;
     setCurrent(time);
 
+    const step = time - lastMedia.current;
+    if (step > 0 && step < 2.5 && !e.currentTarget.paused) pendingDelta.current += step;
+    lastMedia.current = time;
+    lastKnown.current = { time, duration: e.currentTarget.duration || 0 };
+    if (Date.now() - lastFlush.current > PROGRESS_EVERY_MS) flushProgress();
+
     const total = e.currentTarget.duration;
     if (onWatched && !watchedReported.current && total > 0 && time / total >= 0.85) {
       watchedReported.current = true;
@@ -232,6 +348,7 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
   function chooseSpeed(rate) {
     videoRef.current.playbackRate = rate;
     setSpeed(rate);
+    onSpeedChange?.(rate);
     setMenuOpen(false);
   }
 
@@ -264,6 +381,102 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
     } catch (err) {
       console.error("Picture-in-picture failed:", err);
     }
+  }
+
+  function handleLoadedMetadata(e) {
+    const v = e.currentTarget;
+    setDuration(v.duration);
+    if (initialSpeed !== 1) v.playbackRate = initialSpeed;
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    if (startAt >= MIN_RESUME_SECONDS && Number.isFinite(v.duration) && startAt < v.duration - 20) {
+      v.currentTime = startAt;
+      lastMedia.current = startAt;
+      setResumeNote(startAt);
+      clearTimeout(resumeTimer.current);
+      resumeTimer.current = setTimeout(() => setResumeNote(null), 7000);
+    }
+  }
+
+  function startOver() {
+    const v = videoRef.current;
+    if (v) v.currentTime = 0;
+    setResumeNote(null);
+  }
+
+  function showHud(icon, label, value) {
+    setHud({ icon, label, value });
+    clearTimeout(hudTimer.current);
+    hudTimer.current = setTimeout(() => setHud(null), 900);
+  }
+
+  function gestureStart(e) {
+    if (e.pointerType === "mouse" || !settings.gestures) return;
+    const v = videoRef.current;
+    const box = e.currentTarget.getBoundingClientRect();
+    gesture.current = {
+      x: e.clientX,
+      y: e.clientY,
+      side: e.clientX - box.left < box.width / 2 ? "left" : "right",
+      height: box.height,
+      mode: null,
+      volume: v.muted ? 0 : v.volume,
+      brightness,
+      rate: v.playbackRate,
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    clearTimeout(holdTimer.current);
+    holdTimer.current = setTimeout(() => {
+      const g = gesture.current;
+      if (!g || g.mode || v.paused) return;
+      g.mode = "hold";
+      suppressClick.current = true;
+      v.playbackRate = HOLD_SPEED;
+      setHolding(true);
+      vibrate(15);
+    }, HOLD_MS);
+  }
+
+  function gestureMove(e) {
+    const g = gesture.current;
+    if (!g || g.mode === "hold") return;
+    const dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+
+    if (!g.mode) {
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearTimeout(holdTimer.current);
+      // Swipes only work in fullscreen, so scrolling the page with a finger on the video still works.
+      if (fullscreen && Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+        g.mode = g.side === "left" ? "brightness" : "volume";
+        suppressClick.current = true;
+      } else return;
+    }
+
+    const delta = -dy / (g.height * 0.8);
+    if (g.mode === "volume") {
+      const next = clamp(g.volume + delta, 0, 1);
+      const v = videoRef.current;
+      v.volume = next;
+      v.muted = next === 0;
+      showHud(next === 0 ? "volume_off" : next < 0.5 ? "volume_down" : "volume_up", `${Math.round(next * 100)}%`, next);
+    } else {
+      const next = clamp(g.brightness + delta, 0.3, 1.5);
+      setBrightness(next);
+      showHud("brightness_6", `${Math.round(next * 100)}%`, (next - 0.3) / 1.2);
+    }
+  }
+
+  function gestureEnd() {
+    clearTimeout(holdTimer.current);
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    if (g.mode === "hold") {
+      const v = videoRef.current;
+      if (v) v.playbackRate = speed;
+      setHolding(false);
+    }
+    if (g.mode) setTimeout(() => (suppressClick.current = false), 60);
   }
 
   function handleKeyDown(e) {
@@ -318,11 +531,18 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
         autoPlay={autoPlay}
         playsInline
         crossOrigin="anonymous"
+        style={brightness !== 1 ? { filter: `brightness(${brightness})` } : undefined}
+        onContextMenu={(e) => e.preventDefault()}
         onPointerDown={(e) => {
           pointerType.current = e.pointerType;
           controlsWereVisible.current = showControls;
+          gestureStart(e);
         }}
+        onPointerMove={gestureMove}
+        onPointerUp={gestureEnd}
+        onPointerCancel={gestureEnd}
         onClick={(e) => {
+          if (suppressClick.current) return;
           if (phoneLike()) {
             handleTap(e);
             return;
@@ -332,17 +552,23 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
         }}
         onDoubleClick={() => !phoneLike() && toggleFullscreen()}
         onPlay={() => {
+          setEndCard((c) => (c?.going ? c : null));
           setPlaying(true);
           setStarted(true);
           wake();
         }}
         onError={() => kind === "file" && setFailed(true)}
-        onPause={() => setPlaying(false)}
+        onPause={() => {
+          setPlaying(false);
+          flushProgress();
+        }}
         onEnded={() => {
           setPlaying(false);
+          flushProgress();
+          if (nextEpisode != null) setEndCard({ left: autoNext ? settings.countdownSeconds : null });
           onEnded?.();
         }}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={handleLoadedMetadata}
         onDurationChange={(e) => setDuration(e.currentTarget.duration)}
         onTimeUpdate={handleTimeUpdate}
         onProgress={(e) => {
@@ -361,7 +587,7 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
         }}
       >
         {subtitles && (
-          <track kind="subtitles" src={subtitles} srcLang="en" label="Subtitles" default />
+          <track ref={trackRef} kind="subtitles" src={subtitles} srcLang="en" label="Subtitles" />
         )}
       </video>
 
@@ -380,6 +606,88 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
         <div key={flash.id} className={`player__flash player__flash--${flash.side}`} aria-hidden="true">
           <Icon name={flash.side === "left" ? "fast_rewind" : "fast_forward"} filled />
           <span>{flash.side === "left" ? "-" : "+"}{flash.seconds}s</span>
+        </div>
+      )}
+
+      {settings.subEnabled && cues.length > 0 && (
+        <div
+          className={`player__subs player__subs--${shownSubSize} player__subs--${settings.subPos}`}
+          style={{ "--sub-bg": `rgba(0, 0, 0, ${settings.subBg})` }}
+          aria-hidden="true"
+        >
+          {cues.map((line, i) => (
+            <p key={i}>{line}</p>
+          ))}
+        </div>
+      )}
+
+      {holding && (
+        <div className="player__badge" aria-hidden="true">
+          <Icon name="fast_forward" filled /> {HOLD_SPEED}x
+        </div>
+      )}
+
+      {hud && (
+        <div className="player__hud" aria-hidden="true">
+          <Icon name={hud.icon} filled />
+          <span className="player__hud-bar">
+            <span style={{ height: `${Math.round(hud.value * 100)}%` }} />
+          </span>
+          <span>{hud.label}</span>
+        </div>
+      )}
+
+      {resumeNote != null && (
+        <div className="player__toast" role="status">
+          <span>Resumed at {formatTime(resumeNote)}</span>
+          <button type="button" onClick={startOver}>
+            Start over
+          </button>
+        </div>
+      )}
+
+      {endCard && nextEpisode != null && (
+        <div className="player__next" role="dialog" aria-label="Next episode">
+          <p className="player__next-label">
+            {endCard.going ? "Loading…" : endCard.left != null ? `Next episode in ${endCard.left}s` : "Episode finished"}
+          </p>
+          <p className="player__next-title">Episode {nextEpisode}</p>
+          <div className="player__next-actions">
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={endCard.going}
+              onClick={() => {
+                setEndCard({ left: null, going: true });
+                onNext?.();
+              }}
+            >
+              <Icon name="skip_next" filled /> Play now
+            </button>
+            {endCard.left != null && (
+              <button type="button" className="btn btn--outline" onClick={() => setEndCard({ left: null })}>
+                Cancel
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn--outline"
+              disabled={endCard.going}
+              onClick={() => {
+                setEndCard(null);
+                const v = videoRef.current;
+                if (v) {
+                  v.currentTime = 0;
+                  v.play().catch(() => {});
+                }
+              }}
+            >
+              <Icon name="replay" /> Replay
+            </button>
+          </div>
+          {endCard.left != null && !endCard.going && (
+            <span className="player__next-bar" style={{ animationDuration: `${settings.countdownSeconds}s` }} />
+          )}
         </div>
       )}
 
@@ -455,20 +763,87 @@ function Player({ src, kind = "hls", subtitles, skipTimes = [], autoSkip = false
                 <Icon name="settings" filled />
               </button>
               {menuOpen && (
-                <div className="player__menu" role="menu" aria-label="Playback speed">
+                <div className="player__menu" role="menu" aria-label="Player settings">
                   <p className="player__menu-title">Speed</p>
-                  {SPEEDS.map((rate) => (
-                    <button
-                      key={rate}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={rate === speed}
-                      className={`player__menu-item${rate === speed ? " is-active" : ""}`}
-                      onClick={() => chooseSpeed(rate)}
-                    >
-                      {rate === 1 ? "Normal" : `${rate}x`}
-                    </button>
-                  ))}
+                  <div className="player__chips">
+                    {SPEEDS.map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={rate === speed}
+                        className={`player__chip${rate === speed ? " is-active" : ""}`}
+                        onClick={() => chooseSpeed(rate)}
+                      >
+                        {rate === 1 ? "1x" : `${rate}x`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {subtitles && (
+                    <>
+                      <p className="player__menu-title">Subtitles</p>
+                      <div className="player__chips">
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={settings.subEnabled}
+                          className={`player__chip${settings.subEnabled ? " is-active" : ""}`}
+                          onClick={() => updateSettings({ subEnabled: !settings.subEnabled })}
+                        >
+                          {settings.subEnabled ? "On" : "Off"}
+                        </button>
+                      </div>
+
+                      <p className="player__menu-sub">Size (this show)</p>
+                      <div className="player__chips">
+                        {SUB_SIZES.map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={shownSubSize === value}
+                            className={`player__chip${shownSubSize === value ? " is-active" : ""}`}
+                            onClick={() => onSubSize?.(value)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <p className="player__menu-sub">Background</p>
+                      <div className="player__chips">
+                        {SUB_BACKGROUNDS.map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={settings.subBg === value}
+                            className={`player__chip${settings.subBg === value ? " is-active" : ""}`}
+                            onClick={() => updateSettings({ subBg: value })}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <p className="player__menu-sub">Position</p>
+                      <div className="player__chips">
+                        {[["low", "Low"], ["high", "High"]].map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={settings.subPos === value}
+                            className={`player__chip${settings.subPos === value ? " is-active" : ""}`}
+                            onClick={() => updateSettings({ subPos: value })}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

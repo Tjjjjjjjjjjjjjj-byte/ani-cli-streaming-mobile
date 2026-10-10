@@ -1,0 +1,130 @@
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  /* Home, the search box, then any number of 44px icon buttons. */
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 44px;
+  align-items: center;
+  gap: 16px;
+  padding: calc(12px + env(safe-area-inset-top)) var(--gutter) 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: var(--line);
+  color: var(--text);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.search-form {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  justify-self: center;
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  font-size: 22px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 18px 0 46px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--text);
+  font: inherit;
+}
+
+.search-input::placeholder {
+  color: var(--muted);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(255 122 156 / 0.25);
+}
+
+.search-input:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.navbar__title {
+  justify-self: start;
+  overflow: hidden;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .navbar {
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-auto-columns: 40px;
+    gap: 4px;
+  }
+
+  .navbar .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn {
+    transition: none;
+  }
+}
+
+.icon-btn {
+  position: relative;
+}
+
+.icon-btn__badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}

@@ -647,3 +647,19 @@ img.episodes__thumb {
     animation: none;
   }
 }
+
+/* Episodes already saved in the library. */
+.episodes__saved {
+  color: #6ee7a0;
+  font-size: 18px;
+}
+
+.episodes__marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.episodes__item.is-saved .episodes__num {
+  color: #6ee7a0;
+}

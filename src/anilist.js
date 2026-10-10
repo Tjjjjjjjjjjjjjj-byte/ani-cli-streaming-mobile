@@ -1,7 +1,9 @@
 import { API_BASE } from "./api";
+import { getSettings } from "./store/settings";
 
 const ENDPOINT = "https://graphql.anilist.co";
-const ALLOW_ADULT = false;
+// Read at call time so flipping the switch in Settings takes effect without a reload.
+const allowAdult = () => getSettings().allowAdult;
 
 const MINUTE = 60_000;
 const LIST_TTL = 30 * MINUTE;
@@ -190,7 +192,7 @@ export function searchAnime(body, signal) {
     format,
     status,
     sort: [SEARCH_SORTS[sortKey]],
-    isAdult: ALLOW_ADULT ? undefined : false,
+    isAdult: allowAdult() ? undefined : false,
   };
 
   const key = `search:${JSON.stringify(vars)}`;
@@ -204,7 +206,7 @@ export function searchAnime(body, signal) {
         server("/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ ...body, adult: allowAdult() }),
         }),
     ),
   );
@@ -251,7 +253,7 @@ async function buildDiscover() {
       const lists = batch
         .map(
           (sec, i) =>
-            `s${i}: Page(perPage: ${sec.perPage ?? 20}) { media(type: ANIME${ALLOW_ADULT ? "" : ", isAdult: false"}, ${sec.args}) { ${sec.hero ? HERO_FIELDS : CARD_FIELDS} } }`,
+            `s${i}: Page(perPage: ${sec.perPage ?? 20}) { media(type: ANIME${allowAdult() ? "" : ", isAdult: false"}, ${sec.args}) { ${sec.hero ? HERO_FIELDS : CARD_FIELDS} } }`,
         )
         .join("\n");
       const data = await direct(`query { ${lists} }`, {});
@@ -282,9 +284,9 @@ async function buildDiscover() {
 
 export function fetchDiscover(signal) {
   const job = cached(
-    "discover2",
+    `discover2:${allowAdult() ? "adult" : "safe"}`,
     LIST_TTL,
-    () => directThenServer(buildDiscover, () => server("/discover")),
+    () => directThenServer(buildDiscover, () => server(`/discover${allowAdult() ? "?adult=1" : ""}`)),
     true,
   );
   return waitFor(job, signal);
@@ -326,20 +328,20 @@ function toDetails(m) {
 export function fetchDetails(id, signal) {
   const numeric = Number(id);
   const job = cached(
-    `details2:${numeric}`,
+    `details2:${numeric}:${allowAdult() ? "adult" : "safe"}`,
     DETAILS_TTL,
     () =>
       directThenServer(
         async () => {
           const data = await direct(detailsQuery, { id: numeric });
-          if (data.Media.isAdult && !ALLOW_ADULT) {
+          if (data.Media.isAdult && !allowAdult()) {
             const err = new Error("This title isn't available.");
             err.status = 404;
             throw err;
           }
           return toDetails(data.Media);
         },
-        () => server(`/anime/${numeric}`),
+        () => server(`/anime/${numeric}${allowAdult() ? "?adult=1" : ""}`),
       ),
     true,
   );

@@ -45,7 +45,8 @@ app.param("id", (req, _res, next) => {
 
 const ANILIST_URL = "https://graphql.anilist.co";
 
-const ALLOW_ADULT = false;
+// Adult titles are off unless the app asks for them (Settings > Content sends ?adult=1).
+const wantsAdult = (req) => req.query?.adult === "1" || req.body?.adult === true;
 
 const originOf = (req) => `${req.protocol}://${req.get("host")}${req.baseUrl}`;
 const allowedHosts = new Set();
@@ -238,7 +239,7 @@ app.post("/search", async (req, res) => {
       format,
       status,
       sort: [SEARCH_SORTS[sortKey]],
-      isAdult: ALLOW_ADULT ? undefined : false,
+      isAdult: wantsAdult(req) ? undefined : false,
     };
     const data = await aniList(buildSearchQuery(vars), JSON.parse(JSON.stringify(vars)));
     const { pageInfo, media } = data.Page;
@@ -307,7 +308,7 @@ app.get("/anime/:id", async (req, res) => {
     const data = await aniList(detailsQuery, { id });
     const m = data.Media;
 
-    if (m.isAdult && !ALLOW_ADULT) {
+    if (m.isAdult && !wantsAdult(req)) {
       return res.status(404).json({ error: "This title isn't available." });
     }
 
@@ -403,7 +404,7 @@ const toCard = (m) => ({
   releaseDate: m.startDate,
 });
 
-async function buildDiscover() {
+async function buildDiscover(adult = false) {
   const { season, year } = currentSeason();
   const sections = [
     { id: "trending", title: "Trending now", args: "sort: TRENDING_DESC", perPage: 25, hero: true },
@@ -424,7 +425,7 @@ async function buildDiscover() {
       const lists = batch
         .map(
           (sec, i) =>
-            `s${i}: Page(perPage: ${sec.perPage ?? 20}) { media(type: ANIME${ALLOW_ADULT ? "" : ", isAdult: false"}, ${sec.args}) { ${sec.hero ? HERO_FIELDS : CARD_FIELDS} } }`,
+            `s${i}: Page(perPage: ${sec.perPage ?? 20}) { media(type: ANIME${adult ? "" : ", isAdult: false"}, ${sec.args}) { ${sec.hero ? HERO_FIELDS : CARD_FIELDS} } }`,
         )
         .join("\n");
       const data = await aniList(`query { ${lists} }`, {});
@@ -458,24 +459,26 @@ async function buildDiscover() {
   return { data: { hero, rows }, complete: settled.every((r) => r.status === "fulfilled") };
 }
 
-let discoverCache = null;
-let discoverBuilding = null;
+const discoverCaches = { safe: null, adult: null };
+const discoverBuildings = { safe: null, adult: null };
 
-app.get("/discover", async (_req, res) => {
-  if (discoverCache && Date.now() - discoverCache.at < discoverCache.ttl) {
-    return res.json(discoverCache.data);
+app.get("/discover", async (req, res) => {
+  const mode = wantsAdult(req) ? "adult" : "safe";
+  const cache = discoverCaches[mode];
+  if (cache && Date.now() - cache.at < cache.ttl) {
+    return res.json(cache.data);
   }
 
   try {
-    discoverBuilding ??= buildDiscover().finally(() => {
-      discoverBuilding = null;
+    discoverBuildings[mode] ??= buildDiscover(mode === "adult").finally(() => {
+      discoverBuildings[mode] = null;
     });
-    const { data, complete } = await discoverBuilding;
-    discoverCache = { at: Date.now(), ttl: complete ? DISCOVER_TTL : DISCOVER_PARTIAL_TTL, data };
+    const { data, complete } = await discoverBuildings[mode];
+    discoverCaches[mode] = { at: Date.now(), ttl: complete ? DISCOVER_TTL : DISCOVER_PARTIAL_TTL, data };
     res.json(data);
   } catch (error) {
     console.error("Discover failed:", error);
-    if (discoverCache) return res.json(discoverCache.data);
+    if (cache) return res.json(cache.data);
     res.status(error.status === 429 ? 429 : 502).json({ error: error.message });
   }
 });
@@ -810,6 +813,9 @@ async function folderBytes(dir) {
 
 async function runJob(job) {
   for (const episode of job.episodes) {
+    // Pause and cancel take effect between episodes: the episode being fetched right now is allowed to finish.
+    while (job.paused && !job.cancelled) await sleep(500);
+    if (job.cancelled) break;
     job.current = episode;
     try {
       const existing = await findEpisode(job.animeId, episode, job.lang);
@@ -847,7 +853,9 @@ async function runJob(job) {
   job.current = null;
   job.stage = null;
   await fs.rm(job.dir, { recursive: true, force: true });
-  if (job.files.length === 0) {
+  if (job.cancelled) {
+    job.status = "canceled";
+  } else if (job.files.length === 0) {
     job.status = "error";
     job.error = job.failed[0]?.error ?? "Nothing was downloaded.";
   } else {
@@ -902,6 +910,8 @@ app.post("/anime/:id/download", async (req, res) => {
       okEpisodes: [],
       failed: [],
       error: null,
+      paused: false,
+      cancelled: false,
     };
     job.dir = path.join(DOWNLOAD_ROOT, job.id);
     await fs.mkdir(job.dir, { recursive: true });
@@ -931,8 +941,35 @@ app.get("/downloads/:jobId", async (req, res) => {
     completed: job.files.length,
     current: job.current,
     failed: job.failed.map((f) => f.episode),
+    done: job.okEpisodes,
+    episodes: job.episodes,
+    paused: job.paused,
     filename: job.status === "done" ? downloadName(job) : null,
   });
+});
+
+app.post("/downloads/:jobId/pause", (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Unknown download." });
+  if (job.status === "running") job.paused = true;
+  res.json({ paused: job.paused });
+});
+
+app.post("/downloads/:jobId/resume", (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Unknown download." });
+  job.paused = false;
+  res.json({ paused: job.paused });
+});
+
+app.delete("/downloads/:jobId", (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Unknown download." });
+  if (job.status === "running") {
+    job.cancelled = true;
+    job.paused = false;
+  }
+  res.json({ ok: true });
 });
 
 app.get("/downloads/:jobId/file", async (req, res) => {

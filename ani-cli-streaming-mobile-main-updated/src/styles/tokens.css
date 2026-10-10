@@ -1,0 +1,15 @@
+:root {
+  --ink: #191430;
+  --panel: #241d42;
+  --line: #3a3060;
+  --text: #efeafb;
+  --muted: #a59dc2;
+  --accent: #ff7a9c;
+  --score: #ffd166;
+
+  --font: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --gutter: clamp(16px, 4vw, 40px);
+  --page-width: 1280px;
+
+  color-scheme: dark;
+}

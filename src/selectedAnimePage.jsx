@@ -11,9 +11,19 @@ import { useEpisodeInfo } from "./watch/useEpisodeInfo";
 import { useThemes } from "./watch/useThemes";
 import SeriesSidebar from "./SeriesSidebar";
 import { useProgress } from "./watch/useProgress";
+import { getPosition } from "./store/history";
+import { getShowPrefs, setShowPrefs } from "./store/showPrefs";
+import { useSavedEpisodes } from "./library/useSavedEpisodes";
+import WatchlistButton from "./watch/WatchlistButton";
 import AiringCountdown from "./AiringCountdown";
 import { fetchDetails } from "./anilist";
 import { TrailerBackground } from "./Trailer";
+
+function formatSpot(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = String(Math.floor(seconds % 60)).padStart(2, "0");
+  return `${m}:${s}`;
+}
 
 function SelectedAnimePage() {
   const { id } = useParams();
@@ -24,11 +34,16 @@ function SelectedAnimePage() {
 
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [lang, setLang] = useState("sub");
+  const [lang, setLangState] = useState(() => (getShowPrefs(id).lang === "dub" ? "dub" : "sub"));
+  const setLang = (next) => {
+    setLangState(next);
+    setShowPrefs(id, { lang: next });
+  };
   const [download, startDownload, startDownloadAll] = useDownload(id, lang);
   const { episodes: episodeInfo, loading: infoLoading } = useEpisodeInfo(id);
   const themes = useThemes(id);
   const [progress] = useProgress(id);
+  const saved = useSavedEpisodes(id, lang);
   const pageRef = useRef(null);
 
   useEffect(() => {
@@ -105,10 +120,11 @@ function SelectedAnimePage() {
   const finishedLast = last != null && progress.watched.includes(last);
   const resumeAt =
     last == null ? 1 : finishedLast && (available == null || last < available) ? last + 1 : last;
+  const spot = getPosition(id, resumeAt);
   const resumeLabel =
     last == null
       ? "Start watching E1"
-      : `${finishedLast && resumeAt === last ? "Rewatch" : "Continue watching"} E${resumeAt}`;
+      : `${finishedLast && resumeAt === last ? "Rewatch" : "Continue watching"} E${resumeAt}${spot ? ` · ${formatSpot(spot.t)}` : ""}`;
 
   const details = [
     ["Format", formatLabel],
@@ -167,7 +183,7 @@ function SelectedAnimePage() {
             <div className="series-actions">
               <Link
                 className="btn btn--primary"
-                to={`/anime/${id}/watch/${resumeAt}${lang === "dub" ? "?lang=dub" : ""}`}
+                to={`/anime/${id}/watch/${resumeAt}?lang=${lang}`}
                 state={{ anime }}
               >
                 <span className="material-symbols-outlined" aria-hidden="true">
@@ -183,6 +199,7 @@ function SelectedAnimePage() {
                   Trailer
                 </Link>
               )}
+              <WatchlistButton anime={anime} />
               <button className="btn btn--outline" type="button" onClick={handleShare}>
                 <span className="material-symbols-outlined" aria-hidden="true">
                   {copied ? "check" : "share"}
@@ -215,6 +232,7 @@ function SelectedAnimePage() {
               linkState={{ anime }}
               info={episodeInfo}
               watched={progress.watched}
+              saved={saved}
               allowRich
               className="episodes--grid"
             />

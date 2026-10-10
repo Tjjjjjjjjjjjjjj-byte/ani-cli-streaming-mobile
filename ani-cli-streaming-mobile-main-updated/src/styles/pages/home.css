@@ -1,0 +1,33 @@
+.main-home-content h1 {
+  max-width: 16ch;
+  font-size: clamp(2.25rem, 8vw, 5.75rem);
+  font-weight: 800;
+  font-stretch: 75%;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.main-home-content p {
+  max-width: 46ch;
+  margin-top: 20px;
+  font-size: 1.125rem;
+  color: var(--muted);
+}
+
+.history,
+.discover {
+  margin-top: 64px;
+}
+
+.history h2,
+.discover h2 {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.25rem;
+  font-weight: 650;
+}

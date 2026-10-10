@@ -8,6 +8,7 @@ import { formatAired } from "../utils/animeFormat";
 const CHUNK = 100;
 const NO_INFO = {};
 const NO_EPISODES = [];
+const NO_SAVED = new Set();
 
 function EpisodeList({
   animeId,
@@ -22,6 +23,7 @@ function EpisodeList({
   linkState,
   info = NO_INFO,
   watched = NO_EPISODES,
+  saved = NO_SAVED,
   allowRich = false,
   className = "",
 }) {
@@ -278,7 +280,8 @@ function EpisodeList({
               const detail = info[n];
               const title = detail?.title ?? `Episode ${n}`;
               const aired = formatAired(detail?.aired);
-              const classes = `episodes__item${isCurrent ? " is-current" : ""}${isSelected ? " is-selected" : ""}${isWatched ? " is-watched" : ""}`;
+              const isSaved = saved.has(n);
+              const classes = `episodes__item${isCurrent ? " is-current" : ""}${isSelected ? " is-selected" : ""}${isWatched ? " is-watched" : ""}${isSaved ? " is-saved" : ""}`;
               const label = detail?.title ? `Episode ${n}: ${detail.title}` : `Episode ${n}`;
 
               const marker = selecting ? (
@@ -292,6 +295,12 @@ function EpisodeList({
               ) : isWatched ? (
                 <span className="material-symbols-outlined episodes__seen" aria-hidden="true">
                   check_circle
+                </span>
+              ) : null;
+
+              const savedMark = isSaved ? (
+                <span className="material-symbols-outlined episodes__saved" title="Downloaded" aria-label="Downloaded">
+                  download_done
                 </span>
               ) : null;
 
@@ -316,12 +325,16 @@ function EpisodeList({
                     )}
                     {detail?.synopsis && <span className="episodes__synopsis">{detail.synopsis}</span>}
                   </span>
-                  <span className="episodes__marker">{marker}</span>
+                  <span className="episodes__marker">
+                    {savedMark}
+                    {marker}
+                  </span>
                 </>
               ) : (
                 <>
                   <span className="episodes__num">{n}</span>
                   <span className="episodes__label">{title}</span>
+                  {savedMark}
                   {marker}
                 </>
               );

@@ -1,5 +1,6 @@
 import Hero from "../discover/Hero";
 import Row from "../discover/Row";
+import ContinueRow from "../discover/ContinueRow";
 import { useDiscover } from "../discover/useDiscover";
 
 function MainHome() {
@@ -43,6 +44,7 @@ function MainHome() {
     <main className="discover">
       {discover.hero.length > 0 && <Hero items={discover.hero} />}
       <div className="discover__rows">
+        <ContinueRow />
         {discover.rows.map((row) => (
           <Row key={row.id} title={row.title} items={row.items} />
         ))}

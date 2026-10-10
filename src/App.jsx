@@ -10,6 +10,8 @@ import DownloadProvider from "./watch/DownloadProvider.jsx";
 import DownloadsPage from "./library/DownloadsPage.jsx";
 import LibraryAnimePage from "./library/LibraryAnimePage.jsx";
 import LibraryWatchPage from "./library/LibraryWatchPage.jsx";
+import SettingsPage from "./settings/SettingsPage.jsx";
+import WatchlistPage from "./settings/WatchlistPage.jsx";
 
 function App() {
   if (STANDALONE) {
@@ -20,6 +22,7 @@ function App() {
           <Route path="/downloads" element={<DownloadsPage />} />
           <Route path="/downloads/:id" element={<LibraryAnimePage />} />
           <Route path="/downloads/:id/watch/:key" element={<LibraryWatchPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/downloads" replace />} />
         </Routes>
       </>
@@ -38,6 +41,8 @@ function App() {
         <Route path="/downloads" element={<DownloadsPage />} />
         <Route path="/downloads/:id" element={<LibraryAnimePage />} />
         <Route path="/downloads/:id/watch/:key" element={<LibraryWatchPage />} />
+        <Route path="/list" element={<WatchlistPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </DownloadProvider>
   );

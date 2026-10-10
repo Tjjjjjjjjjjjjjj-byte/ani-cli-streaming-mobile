@@ -1,20 +1,33 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import EpisodeList from "./watch/EpisodeList";
 import WatchPanel from "./watch/WatchPanel";
 import { useEpisode } from "./watch/useEpisode";
-import { useDownload } from "./watch/useDownload";
+import { useDownload, useDownloadQueue } from "./watch/useDownload";
 import { useSkipTimes } from "./watch/useSkipTimes";
 import { useEpisodeInfo } from "./watch/useEpisodeInfo";
 import { rememberEpisode, useProgress } from "./watch/useProgress";
 import { FORMAT_LABELS, STATUS_LABELS } from "./utils/animeFormat";
 import { fetchDetails } from "./anilist";
+import { getPosition, recordPosition } from "./store/history";
+import { setShowPrefs, showPrefsStore } from "./store/showPrefs";
+import { useStore } from "./store/storage";
+import { addFinishedEpisode, addWatchTime } from "./store/stats";
+import { autoTrack } from "./store/watchlist";
+import { getSettings } from "./store/settings";
+import { canAutoDownload } from "./store/network";
+import { useSavedEpisodes } from "./library/useSavedEpisodes";
+import { deleteFromLibrary } from "./library/useLibrary";
+import { episodeKey } from "./library/cleanup";
 
 function WatchPage() {
   const { id, episode: episodeParam } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const lang = searchParams.get("lang") === "dub" ? "dub" : "sub";
+  // The URL decides when it says so; otherwise use what you last picked for this show.
+  const langParam = searchParams.get("lang");
+  const showPrefs = useStore(showPrefsStore)[id] ?? {};
+  const lang = langParam === "dub" || langParam === "sub" ? langParam : showPrefs.lang === "dub" ? "dub" : "sub";
 
   const location = useLocation();
   const preview =
@@ -31,10 +44,22 @@ function WatchPage() {
   const { episodes: episodeInfo, loading: infoLoading } = useEpisodeInfo(id);
   const [progress, markWatched] = useProgress(id);
   const detail = validEpisode ? episodeInfo[episode] : null;
+  const queue = useDownloadQueue();
+  const saved = useSavedEpisodes(id, lang);
+  const savedRef = useRef(saved);
+  const animeRef = useRef(null);
+
+  // Read the saved spot once per episode/language, not on every save, so playback never jumps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const startAt = useMemo(() => getPosition(id, episode)?.t ?? 0, [id, episode, lang]);
 
   useEffect(() => {
     if (validEpisode) rememberEpisode(id, episode);
   }, [id, episode, validEpisode]);
+
+  useEffect(() => {
+    if (validEpisode) setShowPrefs(id, { lang });
+  }, [id, lang, validEpisode]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,6 +72,48 @@ function WatchPage() {
   }, [id]);
 
   const anime = result?.id === id ? result.data : preview;
+
+  useEffect(() => {
+    animeRef.current = anime;
+    savedRef.current = saved;
+  });
+
+  // Called every few seconds by the player: remembers the spot and counts watch time.
+  const handleProgress = useCallback(
+    ({ time, duration, delta }) => {
+      const a = animeRef.current;
+      if (!a) return;
+      recordPosition({ anime: a, episode, lang, time, duration });
+      addWatchTime({ anime: a, seconds: delta });
+    },
+    [episode, lang],
+  );
+
+  // Called once, at 85% of an episode.
+  const handleWatched = useCallback(() => {
+    markWatched(episode);
+    const a = animeRef.current;
+    if (!a) return;
+    const available = a.availableEpisodes ?? a.episodes ?? null;
+    addFinishedEpisode({ anime: a });
+    autoTrack(a, episode, available);
+
+    const settings = getSettings();
+    const have = savedRef.current;
+
+    if (settings.deleteAfterWatching && have.has(episode)) {
+      deleteFromLibrary(`/library/${id}/episodes/${encodeURIComponent(episodeKey(episode, lang))}`)
+        .then(() => queue.refreshLibrary?.())
+        .catch((err) => console.warn("Couldn't delete the watched download:", err));
+    }
+
+    if (settings.autoDownloadNext > 0 && canAutoDownload(settings.wifiOnly)) {
+      const wanted = Array.from({ length: settings.autoDownloadNext }, (_, i) => episode + 1 + i).filter(
+        (n) => (available == null || n <= available) && !have.has(n),
+      );
+      if (wanted.length) queue.enqueue(id, wanted, lang, { auto: true });
+    }
+  }, [episode, id, lang, markWatched, queue]);
 
   useEffect(() => {
     if (anime?.title && validEpisode) document.title = `${anime.title} – Episode ${episode}${detail?.title ? `: ${detail.title}` : ""}`;
@@ -66,7 +133,7 @@ function WatchPage() {
   }
 
   function goTo(n, nextLang = lang) {
-    navigate(`/anime/${id}/watch/${n}${nextLang === "dub" ? "?lang=dub" : ""}`);
+    navigate(`/anime/${id}/watch/${n}?lang=${nextLang}`);
   }
 
   const formatLabel = anime ? FORMAT_LABELS[anime.format] ?? anime.format : null;
@@ -111,6 +178,7 @@ function WatchPage() {
             linkState={anime ? { anime } : undefined}
             info={episodeInfo}
             watched={progress.watched}
+            saved={saved}
             className="episodes--side"
           />
         </aside>
@@ -126,7 +194,13 @@ function WatchPage() {
             onSelectLang={(l) => goTo(episode, l)}
             onRetry={retryWatch}
             skipTimes={skipTimes}
-            onWatched={() => markWatched(episode)}
+            onWatched={handleWatched}
+            startAt={startAt}
+            initialSpeed={showPrefs.speed ?? 1}
+            onSpeedChange={(speed) => setShowPrefs(id, { speed })}
+            subSize={showPrefs.subSize ?? null}
+            onSubSize={(subSize) => setShowPrefs(id, { subSize })}
+            onProgress={handleProgress}
             expanded={theater}
             onToggleExpand={() => setTheater((v) => !v)}
             detail={detail}
