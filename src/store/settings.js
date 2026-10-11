@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { createStore, useStore } from "./storage";
+import { validateAgainstDefaults } from "./validators";
 
 export const DEFAULT_SETTINGS = {
   // Content
@@ -7,6 +9,9 @@ export const DEFAULT_SETTINGS = {
   gestures: true,
   haptics: true,
   countdownSeconds: 5,
+  // Playback and caching
+  saveEverySeconds: 5, // how often the watched position is saved: 2 / 5 / 10 / 30
+  bufferAheadSeconds: 0, // 0 = hls.js default; otherwise 120 / 300 / 600 seconds kept ready ahead
   // Subtitles (size can also be overridden per show)
   subEnabled: true,
   subSize: "medium",
@@ -25,7 +30,7 @@ export const DEFAULT_SETTINGS = {
   collectStats: true,
 };
 
-export const settingsStore = createStore("settings:v1", DEFAULT_SETTINGS);
+export const settingsStore = createStore("settings:v1", DEFAULT_SETTINGS, { validate: validateAgainstDefaults(DEFAULT_SETTINGS) });
 
 // Spread defaults first so settings added in a later version still get a value.
 export const getSettings = () => ({ ...DEFAULT_SETTINGS, ...settingsStore.get() });
@@ -36,7 +41,8 @@ export function updateSettings(patch) {
 
 export function useSettings() {
   const stored = useStore(settingsStore);
-  return [{ ...DEFAULT_SETTINGS, ...stored }, updateSettings];
+  // Memoized: a new object on every render would re-trigger any effect that depends on it.
+  return useMemo(() => [{ ...DEFAULT_SETTINGS, ...stored }, updateSettings], [stored]);
 }
 
 export function vibrate(ms = 10) {

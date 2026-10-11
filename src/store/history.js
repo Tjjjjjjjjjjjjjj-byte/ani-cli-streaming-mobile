@@ -1,12 +1,14 @@
 import { createStore, useStore } from "./storage";
+import { useMemo } from "react";
 import { getSettings } from "./settings";
+import { validateHistory } from "./validators";
 
 const MAX_HISTORY = 40;
 const MIN_SAVE_SECONDS = 15;
 const FINISHED_RATIO = 0.92;
 
 // history: { [animeId]: { id, title, cover, anime, episode, lang, time, duration, total, finished, updatedAt } }
-export const historyStore = createStore("hist:v1", {});
+export const historyStore = createStore("hist:v1", {}, { validate: validateHistory });
 
 const posKey = (animeId, episode) => `pos:${animeId}:${episode}`;
 
@@ -120,5 +122,6 @@ export function clearHistory() {
 // Newest first.
 export function useHistory() {
   const all = useStore(historyStore);
-  return Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt);
+  // Derived from the store value, so the array only changes when the history does.
+  return useMemo(() => Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt), [all]);
 }

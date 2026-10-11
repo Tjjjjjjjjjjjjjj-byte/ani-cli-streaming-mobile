@@ -1,10 +1,11 @@
 import { createStore, today, useStore } from "./storage";
 import { getSettings } from "./settings";
+import { validateStats } from "./validators";
 
 // Everything stays on this device. Nothing here is ever sent anywhere.
 // { days: { "2026-10-10": { sec, eps } }, shows: { [id]: { title, sec, eps } }, genres: { Action: sec }, sec, eps, since }
 const EMPTY = { days: {}, shows: {}, genres: {}, sec: 0, eps: 0, since: null };
-export const statsStore = createStore("stats:v1", EMPTY);
+export const statsStore = createStore("stats:v1", EMPTY, { validate: validateStats });
 
 const MAX_DAYS = 120;
 

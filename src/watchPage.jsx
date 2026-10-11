@@ -8,7 +8,7 @@ import { useSkipTimes } from "./watch/useSkipTimes";
 import { useEpisodeInfo } from "./watch/useEpisodeInfo";
 import { rememberEpisode, useProgress } from "./watch/useProgress";
 import { FORMAT_LABELS, STATUS_LABELS } from "./utils/animeFormat";
-import { fetchDetails } from "./anilist";
+import { fetchDetails, loadFullDetails } from "./anilist";
 import { getPosition, recordPosition } from "./store/history";
 import { setShowPrefs, showPrefsStore } from "./store/showPrefs";
 import { useStore } from "./store/storage";
@@ -20,6 +20,9 @@ import { useSavedEpisodes } from "./library/useSavedEpisodes";
 import { deleteFromLibrary } from "./library/useLibrary";
 import { episodeKey } from "./library/cleanup";
 import SimilarRow from "./discover/SimilarRow";
+
+// Same threshold the history uses before it saves a position.
+const START_TRACKING_SECONDS = 15;
 
 function WatchPage() {
   const { id, episode: episodeParam } = useParams();
@@ -49,6 +52,8 @@ function WatchPage() {
   const saved = useSavedEpisodes(id, lang);
   const savedRef = useRef(saved);
   const animeRef = useRef(null);
+  // Which "id:episode" has already been put on the list as Watching, so it happens once per episode.
+  const startedRef = useRef(null);
 
   // Read the saved spot once per episode/language, not on every save, so playback never jumps.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,8 +91,15 @@ function WatchPage() {
       if (!a) return;
       recordPosition({ anime: a, episode, lang, time, duration });
       addWatchTime({ anime: a, seconds: delta });
+
+      // A show you're part-way through belongs under Watching, not only once an episode is finished.
+      const startedKey = `${id}:${episode}`;
+      if (time >= START_TRACKING_SECONDS && startedRef.current !== startedKey) {
+        startedRef.current = startedKey;
+        autoTrack(a, episode);
+      }
     },
-    [episode, lang],
+    [episode, lang, id],
   );
 
   // Called once, at 85% of an episode.
@@ -97,7 +109,9 @@ function WatchPage() {
     if (!a) return;
     const available = a.availableEpisodes ?? a.episodes ?? null;
     addFinishedEpisode({ anime: a });
-    autoTrack(a, episode, available);
+    // Whether the show is finished depends on real airing info, which a lightweight preview doesn't have.
+    // Make sure we have the full details before deciding.
+    loadFullDetails(id, a).then((full) => autoTrack(full ?? a, episode, { watched: true }));
 
     const settings = getSettings();
     const have = savedRef.current;
@@ -242,7 +256,7 @@ function WatchPage() {
           </aside>
         )}
       </div>
-    
+
       <SimilarRow animeId={id} className="similar--watch" />
     </main>
   );

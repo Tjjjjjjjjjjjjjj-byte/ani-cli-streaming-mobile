@@ -10,7 +10,7 @@ import { useDownload } from "./watch/useDownload";
 import { useEpisodeInfo } from "./watch/useEpisodeInfo";
 import { useThemes } from "./watch/useThemes";
 import SeriesSidebar from "./SeriesSidebar";
-import { useProgress } from "./watch/useProgress";
+import { resumeEpisode, useProgress } from "./watch/useProgress";
 import { getPosition } from "./store/history";
 import { getShowPrefs, setShowPrefs } from "./store/showPrefs";
 import { useSavedEpisodes } from "./library/useSavedEpisodes";
@@ -152,8 +152,7 @@ function SelectedAnimePage() {
 
   const last = progress.last;
   const finishedLast = last != null && progress.watched.includes(last);
-  const resumeAt =
-    last == null ? 1 : finishedLast && (available == null || last < available) ? last + 1 : last;
+  const resumeAt = resumeEpisode(progress, available);
   const spot = getPosition(id, resumeAt);
   const resumeLabel =
     last == null

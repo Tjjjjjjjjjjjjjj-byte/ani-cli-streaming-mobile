@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { useSettings, vibrate } from "./store/settings";
+import { getSettings, useSettings, vibrate } from "./store/settings";
+import { canAutoDownload } from "./store/network";
+import { hlsBufferConfig, saveIntervalMs } from "./playback/config";
+import { isTextEntry } from "./vim/spatial";
 
 const SKIP_SECONDS = 10;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -10,7 +13,6 @@ const FLASH_MS = 700;
 const HOLD_MS = 450;
 const HOLD_SPEED = 2;
 const MIN_RESUME_SECONDS = 15;
-const PROGRESS_EVERY_MS = 5000;
 const SUB_SIZES = [["small", "S"], ["medium", "M"], ["large", "L"], ["xlarge", "XL"]];
 const SUB_BACKGROUNDS = [[0, "None"], [0.4, "Soft"], [0.75, "Solid"]];
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
@@ -162,7 +164,10 @@ function Player({
     }
 
     if (Hls.isSupported()) {
-      const hls = new Hls();
+      // "Buffer ahead" from Settings. Only applies to streamed (HLS) playback; saved files ignore it.
+      // Read at creation, so a changed setting takes effect from the next episode you open.
+      const { bufferAheadSeconds, wifiOnly } = getSettings();
+      const hls = new Hls(hlsBufferConfig(bufferAheadSeconds, canAutoDownload(wifiOnly)));
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -308,7 +313,8 @@ function Player({
     if (step > 0 && step < 2.5 && !e.currentTarget.paused) pendingDelta.current += step;
     lastMedia.current = time;
     lastKnown.current = { time, duration: e.currentTarget.duration || 0 };
-    if (Date.now() - lastFlush.current > PROGRESS_EVERY_MS) flushProgress();
+    // Read at call time so changing the setting applies to the video that is already playing.
+    if (Date.now() - lastFlush.current > saveIntervalMs(getSettings().saveEverySeconds)) flushProgress();
 
     const total = e.currentTarget.duration;
     if (onWatched && !watchedReported.current && total > 0 && time / total >= 0.85) {
@@ -479,23 +485,58 @@ function Player({
     if (g.mode) setTimeout(() => (suppressClick.current = false), 60);
   }
 
+  // Keys go to the player when it (or nothing) has focus. Listening on the
+  // window means no click is needed first, so the page works keyboard-only.
   function handleKeyDown(e) {
-    if (e.target.tagName === "INPUT") return;
+    if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return;
+    const t = e.target;
+    if (isTextEntry(t)) return;
+    const wrap = wrapRef.current;
+    const onBody = !t || t === document.body || t === document.documentElement;
+    if (!onBody && !wrap?.contains(t)) return;
+    if (t?.tagName === "INPUT" && e.key.startsWith("Arrow")) return;
+    const v = videoRef.current;
+    if (!v) return;
+
     switch (e.key) {
       case " ":
-      case "k":
-        if (e.target.tagName === "BUTTON" && e.key === " ") return;
+      case "p":
+        if (t?.tagName === "BUTTON" && e.key === " ") return;
         e.preventDefault();
         togglePlay();
         break;
       case "ArrowLeft":
+      case "h":
         e.preventDefault();
         skip(-SKIP_SECONDS);
         break;
       case "ArrowRight":
+      case "l":
         e.preventDefault();
         skip(SKIP_SECONDS);
         break;
+      case "j":
+      case "k": {
+        e.preventDefault();
+        const next = Math.min(1, Math.max(0, (v.muted ? 0 : v.volume) + (e.key === "k" ? 0.1 : -0.1)));
+        v.volume = Math.round(next * 10) / 10;
+        v.muted = v.volume === 0;
+        break;
+      }
+      case "0":
+        v.currentTime = 0;
+        break;
+      case "s":
+        if (activeSegment) skipSegment(activeSegment);
+        break;
+      case "[":
+      case "]": {
+        const at = SPEEDS.indexOf(speed);
+        const next = SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, at + (e.key === "]" ? 1 : -1)))];
+        v.playbackRate = next;
+        setSpeed(next);
+        break;
+      }
       case "m":
         toggleMute();
         break;
@@ -507,6 +548,16 @@ function Player({
     }
     wake();
   }
+
+  const keyHandler = useRef(handleKeyDown);
+  useEffect(() => {
+    keyHandler.current = handleKeyDown;
+  });
+  useEffect(() => {
+    const onKey = (e) => keyHandler.current(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const progressPct = duration ? (current / duration) * 100 : 0;
   const bufferedPct = duration ? (buffered / duration) * 100 : 0;
@@ -522,7 +573,6 @@ function Player({
       className={`player${showControls ? "" : " is-idle"}${fullscreen ? " is-fullscreen" : ""}`}
       onMouseMove={wake}
       onMouseLeave={() => playing && setControlsVisible(false)}
-      onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
       <video
@@ -567,6 +617,13 @@ function Player({
           flushProgress();
           if (nextEpisode != null) setEndCard({ left: autoNext ? settings.countdownSeconds : null });
           onEnded?.();
+        }}
+        onSeeked={(e) => {
+          // Save the new spot as soon as a seek lands, not only at the next interval.
+          const v = e.currentTarget;
+          lastMedia.current = v.currentTime;
+          lastKnown.current = { time: v.currentTime, duration: v.duration || 0 };
+          flushProgress();
         }}
         onLoadedMetadata={handleLoadedMetadata}
         onDurationChange={(e) => setDuration(e.currentTarget.duration)}

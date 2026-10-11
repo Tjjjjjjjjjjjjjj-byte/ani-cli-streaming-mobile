@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { fetchAiringStatus } from "../anilist";
 import { FORMAT_LABELS, airsIn } from "../utils/animeFormat";
 import { LIST_STATUSES, setListStatus, useWatchlist } from "../store/watchlist";
+import { furthestEpisode, readProgress, resumeEpisode } from "../watch/useProgress";
+import { getShowPrefs } from "../store/showPrefs";
 
 // An episode is out that's later than the last one you finished.
 function hasNewEpisode(id, status) {
@@ -15,6 +17,16 @@ function hasNewEpisode(id, status) {
   } catch {
     return false;
   }
+}
+
+// "Ep 5 / 12" and where the Continue button should go, from what's stored for this show.
+function progressFor(anime, airing) {
+  const progress = readProgress(anime.id);
+  const reached = furthestEpisode(progress);
+  const total = anime.episodes ?? airing?.available ?? anime.available ?? null;
+  const available = airing?.available ?? anime.available ?? anime.episodes ?? null;
+  const resume = anime.status === "completed" ? 1 : resumeEpisode(progress, available);
+  return { reached, total, resume, started: reached > 0 };
 }
 
 function WatchlistPage() {
@@ -65,9 +77,15 @@ function WatchlistPage() {
         </p>
       ) : (
         <div className="library-grid">
-          {shown.map((anime) => (
+          {shown.map((anime) => {
+            const mine = progressFor(anime, airing[anime.id]);
+            const lang = getShowPrefs(anime.id).lang === "dub" ? "dub" : "sub";
+            // The entry's `status` is the list status ("watching"), not the show's airing status,
+            // so it must not travel to other pages as if it were the anime.
+            const preview = { id: anime.id, title: anime.title, cover: anime.cover, format: anime.format, episodes: anime.episodes, rating: anime.rating };
+            return (
             <div className="watchlist__item" key={anime.id}>
-              <Link className="anime-card" to={`/anime/${anime.id}`} state={{ anime }}>
+              <Link className="anime-card" to={`/anime/${anime.id}`} state={{ anime: preview }}>
                 <div className="anime-card__poster">
                   {anime.cover && <img src={anime.cover} alt={anime.title} loading="lazy" />}
                   {anime.rating != null && <span className="badge badge--score">★ {(anime.rating / 10).toFixed(1)}</span>}
@@ -75,6 +93,9 @@ function WatchlistPage() {
                   {anime.status === "watching" && hasNewEpisode(anime.id, airing[anime.id]) && <span className="badge badge--new">New episode</span>}
                 </div>
                 <h3 className="anime-card__title" title={anime.title}>{anime.title}</h3>
+                <p className="anime-card__date watchlist__progress">
+                  {mine.started ? `Ep ${mine.reached}${mine.total != null ? ` / ${mine.total}` : ""}` : "Not started"}
+                </p>
                 {airing[anime.id]?.next ? (
                   <p className="anime-card__date">
                     E{airing[anime.id].next.episode} · {airsIn(airing[anime.id].next.airingAt)}
@@ -83,19 +104,26 @@ function WatchlistPage() {
                   anime.episodes != null && <p className="anime-card__date">{anime.episodes} episodes</p>
                 )}
               </Link>
-              <select
-                className="watchlist__move"
-                aria-label={`Move ${anime.title}`}
-                value={anime.status}
-                onChange={(e) => setListStatus(anime, e.target.value || null)}
-              >
-                {LIST_STATUSES.map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-                <option value="">Remove</option>
-              </select>
+              <div className="watchlist__actions">
+                <Link className="btn btn--primary watchlist__continue" to={`/anime/${anime.id}/watch/${mine.resume}?lang=${lang}`} state={{ anime: preview }}>
+                  <span className="material-symbols-outlined" aria-hidden="true">play_arrow</span>
+                  {anime.status === "completed" ? "Rewatch" : mine.started ? `Continue E${mine.resume}` : "Start E1"}
+                </Link>
+                <select
+                  className="watchlist__move"
+                  aria-label={`Move ${anime.title}`}
+                  value={anime.status}
+                  onChange={(e) => setListStatus(anime, e.target.value || null)}
+                >
+                  {LIST_STATUSES.map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                  <option value="">Remove</option>
+                </select>
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </main>

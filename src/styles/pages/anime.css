@@ -14,7 +14,11 @@
   display: flex;
   align-items: flex-end;
   min-height: clamp(380px, 56vh, 560px);
-  overflow: hidden;
+  /* No overflow clipping here: the "Add to list" menu has to be able to hang below the hero.
+     The zoomed / blurred image is clipped on .series-hero__bg instead.
+     z-index lifts the whole hero (and its menu) above .series-body, which comes later in the page
+     and has its own stacking context from its entrance animation. */
+  z-index: 2;
   background: var(--panel);
 }
 
@@ -22,6 +26,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
+  overflow: hidden;
 }
 
 .series-hero__img {
@@ -68,6 +73,9 @@
   align-items: flex-start;
   gap: 14px;
   max-width: 640px;
+  /* Keep the info column (and the open list menu) above the poster, which comes after it in the DOM. */
+  position: relative;
+  z-index: 1;
 }
 
 .series-hero__info > * {

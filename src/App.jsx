@@ -13,26 +13,31 @@ import LibraryWatchPage from "./library/LibraryWatchPage.jsx";
 import SettingsPage from "./settings/SettingsPage.jsx";
 import WatchlistPage from "./settings/WatchlistPage.jsx";
 import SchedulePage from "./settings/SchedulePage.jsx";
+import VimNav from "./vim/VimNav.jsx";
 import BottomNav from "./ui/BottomNav.jsx";
 import ScrollMemory from "./ui/ScrollMemory.jsx";
 import PullToRefresh from "./ui/PullToRefresh.jsx";
 import SkipLink from "./ui/SkipLink.jsx";
+import ErrorBoundary from "./ui/ErrorBoundary.jsx";
 
 function App() {
   if (STANDALONE) {
     return (
       <>
         <SkipLink />
+        <VimNav />
         <ScrollMemory />
         <PullToRefresh />
         <Navbar />
-        <Routes>
-          <Route path="/downloads" element={<DownloadsPage />} />
-          <Route path="/downloads/:id" element={<LibraryAnimePage />} />
-          <Route path="/downloads/:id/watch/:key" element={<LibraryWatchPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/downloads" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/downloads" element={<DownloadsPage />} />
+            <Route path="/downloads/:id" element={<LibraryAnimePage />} />
+            <Route path="/downloads/:id/watch/:key" element={<LibraryWatchPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/downloads" replace />} />
+          </Routes>
+        </ErrorBoundary>
         <BottomNav />
       </>
     );
@@ -41,22 +46,25 @@ function App() {
   return (
     <DownloadProvider>
       <SkipLink />
+      <VimNav />
       <ScrollMemory />
       <PullToRefresh />
       <Navbar />
-      <Routes>
-        <Route path="/" element={<MainHome />} />
-        <Route path="/search" element={<SearchPage />} />
-        <Route path="/anime/:id" element={<SelectedAnimePage />} />
-        <Route path="/anime/:id/trailer" element={<TrailerPage />} />
-        <Route path="/anime/:id/watch/:episode" element={<WatchPage />} />
-        <Route path="/downloads" element={<DownloadsPage />} />
-        <Route path="/downloads/:id" element={<LibraryAnimePage />} />
-        <Route path="/downloads/:id/watch/:key" element={<LibraryWatchPage />} />
-        <Route path="/list" element={<WatchlistPage />} />
-        <Route path="/schedule" element={<SchedulePage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<MainHome />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/anime/:id" element={<SelectedAnimePage />} />
+          <Route path="/anime/:id/trailer" element={<TrailerPage />} />
+          <Route path="/anime/:id/watch/:episode" element={<WatchPage />} />
+          <Route path="/downloads" element={<DownloadsPage />} />
+          <Route path="/downloads/:id" element={<LibraryAnimePage />} />
+          <Route path="/downloads/:id/watch/:key" element={<LibraryWatchPage />} />
+          <Route path="/list" element={<WatchlistPage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
+      </ErrorBoundary>
       <BottomNav />
     </DownloadProvider>
   );

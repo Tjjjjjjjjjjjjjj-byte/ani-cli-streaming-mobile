@@ -8,45 +8,59 @@ import Row from "./Row";
 
 const MAX_ROWS = 2;
 
+const sameResults = (a, b) =>
+  a.length === b.length &&
+  a.every((r, i) => r.seed.id === b[i].seed.id && r.items.length === b[i].items.length && r.items.every((it, j) => it.id === b[i].items[j].id));
+
 // "Because you watched X": recommendations built from your last couple of shows.
 function BecauseRows() {
   const history = useHistory();
   const [settings] = useSettings();
   const list = useStore(watchlistStore);
-  const [rows, setRows] = useState([]);
+  const { saveHistory, allowAdult } = settings;
 
-  // Only the most recent shows matter, and only their ids: this keeps the effect from re-running on every progress save.
-  const seeds = useMemo(
-    () => history.slice(0, MAX_ROWS).map((h) => ({ id: h.id, title: h.title })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [history.slice(0, MAX_ROWS).map((h) => h.id).join(",")],
-  );
-  const seen = useMemo(() => new Set([...history.map((h) => h.id), ...Object.keys(list).map(Number)]), [history, list]);
+  // The effect below depends only on these primitive keys, never on the history/list arrays,
+  // so progress saves (which change the arrays but not the ids) can't re-trigger it.
+  const seedKey = JSON.stringify(history.slice(0, MAX_ROWS).map((h) => [h.id, h.title]));
+  const seenKey = [...new Set([...history.map((h) => h.id), ...Object.keys(list).map(Number)])].sort((a, b) => a - b).join(",");
+
+  // Raw recommendations per seed. Filtering by "already seen" happens afterwards, so changing your
+  // list re-filters locally instead of refetching.
+  const [results, setResults] = useState([]);
 
   useEffect(() => {
-    if (!settings.saveHistory || seeds.length === 0) {
-      setRows([]);
-      return;
-    }
+    const seeds = saveHistory ? JSON.parse(seedKey).map(([id, title]) => ({ id, title })) : [];
+    if (seeds.length === 0) return undefined;
+
     const controller = new AbortController();
-    Promise.all(seeds.map((s) => fetchSimilar(s.id, controller.signal).then((items) => ({ seed: s, items })).catch(() => null)))
-      .then((results) => {
-        if (controller.signal.aborted) return;
-        const used = new Set();
-        setRows(
-          results
-            .filter(Boolean)
-            .map(({ seed, items }) => ({
-              id: `because-${seed.id}`,
-              title: `Because you watched ${seed.title}`,
-              // Skip anything you've already watched or saved, and anything already shown in the row above.
-              items: items.filter((a) => !seen.has(a.id) && !used.has(a.id) && (used.add(a.id), true)),
-            }))
-            .filter((r) => r.items.length >= 4),
-        );
-      });
+    Promise.all(seeds.map((seed) => fetchSimilar(seed.id, controller.signal).then((items) => ({ seed, items })).catch(() => null))).then((all) => {
+      if (controller.signal.aborted) return;
+      const next = all.filter(Boolean);
+      // Same content as before: keep the old array so nothing re-renders.
+      setResults((prev) => (sameResults(prev, next) ? prev : next));
+    });
     return () => controller.abort();
-  }, [seeds, seen, settings.saveHistory, settings.allowAdult]);
+  }, [seedKey, saveHistory, allowAdult]);
+
+  const rows = useMemo(() => {
+    if (!saveHistory) return [];
+    const currentSeeds = new Set(JSON.parse(seedKey).map(([id]) => id));
+    const seen = new Set(seenKey ? seenKey.split(",").map(Number) : []);
+    const used = new Set();
+    return results
+      .filter(({ seed }) => currentSeeds.has(seed.id))
+      .map(({ seed, items }) => ({
+        id: `because-${seed.id}`,
+        title: `Because you watched ${seed.title}`,
+        // Skip anything you've already watched or saved, and anything already shown in the row above.
+        items: items.filter((a) => {
+          if (seen.has(a.id) || used.has(a.id)) return false;
+          used.add(a.id);
+          return true;
+        }),
+      }))
+      .filter((r) => r.items.length >= 4);
+  }, [results, seedKey, seenKey, saveHistory]);
 
   return rows.map((row) => <Row key={row.id} title={row.title} items={row.items} />);
 }

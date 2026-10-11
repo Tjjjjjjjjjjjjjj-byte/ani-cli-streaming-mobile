@@ -19,10 +19,24 @@ export function writeJson(key, value) {
   }
 }
 
+// Run stored data through an optional validator. A validator returns a safe
+// value; if it throws or returns nothing usable, the fallback is used instead.
+// Corrupt data in localStorage must never reach a render.
+export function sanitize(raw, fallback, validate) {
+  if (!validate) return raw;
+  try {
+    const safe = validate(raw);
+    return safe === undefined || safe === null ? fallback : safe;
+  } catch {
+    return fallback;
+  }
+}
+
 // A tiny observable store backed by localStorage. React components read it
 // with useStore(), plain code (like the player) reads it with store.get().
-export function createStore(key, fallback) {
-  let value = readJson(key, fallback);
+// options.validate(value) is applied to whatever is read from storage.
+export function createStore(key, fallback, { validate } = {}) {
+  let value = sanitize(readJson(key, fallback), fallback, validate);
   const listeners = new Set();
   const emit = () => listeners.forEach((fn) => fn());
 

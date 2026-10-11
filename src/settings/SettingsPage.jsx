@@ -11,6 +11,7 @@ import { clearRecentSearches } from "../store/searchStore";
 import { clearAllPersonalData, clearHistoryData, clearStatsData, exportPersonalData } from "../store/clearData";
 import { formatBytes } from "../utils/animeFormat";
 import { Row, Section, Segmented, Switch } from "./controls";
+import { BUFFER_OPTIONS, SAVE_INTERVAL_OPTIONS } from "../playback/config";
 
 const SUB_SIZES = [["small", "S"], ["medium", "M"], ["large", "L"], ["xlarge", "XL"]];
 const SUB_BACKGROUNDS = [[0, "None"], [0.4, "Soft"], [0.75, "Solid"]];
@@ -193,6 +194,18 @@ function SettingsPage() {
         </Row>
         <Row label="Haptic feedback" hint="A short vibration on double-tap seek and hold-to-speed (Android).">
           <Switch label="Haptic feedback" checked={settings.haptics} onChange={(v) => update({ haptics: v })} />
+        </Row>
+      </Section>
+
+      <Section icon="speed" title="Playback and caching" hint="How often your spot is saved, and how much video is kept ready.">
+        <Row label="Save position every" hint="How often the player remembers where you are. It is also saved when you pause, seek, switch tabs or close the page.">
+          <Segmented label="Save position interval" value={settings.saveEverySeconds} options={SAVE_INTERVAL_OPTIONS} onChange={(v) => update({ saveEverySeconds: v })} />
+        </Row>
+        <Row
+          label="Buffer ahead"
+          hint="How much video the player loads in advance, so weak connections stall less. The buffer lives in memory and is lost when you reload; use Downloads for copies that last. Applies to the next episode you open, to streamed episodes only, and is skipped on mobile data when Wi-Fi only is on (or Data Saver is on)."
+        >
+          <Segmented label="Buffer ahead" value={settings.bufferAheadSeconds} options={BUFFER_OPTIONS} onChange={(v) => update({ bufferAheadSeconds: v })} />
         </Row>
       </Section>
 

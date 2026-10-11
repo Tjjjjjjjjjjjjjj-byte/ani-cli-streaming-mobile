@@ -1,7 +1,8 @@
 import { createStore } from "./storage";
+import { validateShowPrefs } from "./validators";
 
 // One entry per anime: { lang, speed, subSize }.
-const store = createStore("showprefs:v1", {});
+const store = createStore("showprefs:v1", {}, { validate: validateShowPrefs });
 
 export const getShowPrefs = (animeId) => store.get()[animeId] ?? {};
 

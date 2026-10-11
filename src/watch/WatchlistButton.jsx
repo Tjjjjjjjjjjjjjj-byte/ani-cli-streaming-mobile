@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { LIST_STATUSES, setListStatus, useListStatus } from "../store/watchlist";
 
+const MENU_HEIGHT = 190; // roughly: four rows plus padding
+const MENU_WIDTH = 190;
+
 // "Add to list" with Watching / Planning / Completed. Lives on your device only.
 function WatchlistButton({ anime }) {
   const status = useListStatus(anime.id);
   const [open, setOpen] = useState(false);
+  const [flip, setFlip] = useState({ up: false, right: false });
   const wrap = useRef(null);
 
   useEffect(() => {
@@ -23,6 +27,16 @@ function WatchlistButton({ anime }) {
 
   const label = LIST_STATUSES.find(([key]) => key === status)?.[1];
 
+  // Decide where the menu opens from the button's position, so it never runs off the screen.
+  function toggle() {
+    if (!open && wrap.current) {
+      const rect = wrap.current.getBoundingClientRect();
+      const roomBelow = window.innerHeight - rect.bottom;
+      setFlip({ up: roomBelow < MENU_HEIGHT && rect.top > roomBelow, right: rect.left + MENU_WIDTH > window.innerWidth - 8 });
+    }
+    setOpen((o) => !o);
+  }
+
   function choose(next) {
     setListStatus(anime, next);
     setOpen(false);
@@ -35,7 +49,7 @@ function WatchlistButton({ anime }) {
         className={`btn btn--outline${status ? " is-on" : ""}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
       >
         <span className="material-symbols-outlined" aria-hidden="true">
           {status ? "bookmark_added" : "bookmark_add"}
@@ -44,7 +58,7 @@ function WatchlistButton({ anime }) {
       </button>
 
       {open && (
-        <div className="listbtn__menu" role="menu">
+        <div className={`listbtn__menu${flip.up ? " listbtn__menu--up" : ""}${flip.right ? " listbtn__menu--right" : ""}`} role="menu">
           {LIST_STATUSES.map(([key, text]) => (
             <button
               key={key}

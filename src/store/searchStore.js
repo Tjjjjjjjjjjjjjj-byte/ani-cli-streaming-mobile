@@ -1,11 +1,12 @@
 import { createStore, useStore } from "./storage";
+import { validatePresets, validateStringArray } from "./validators";
 import { getSettings } from "./settings";
 
 const MAX_RECENT = 8;
 const MAX_PRESETS = 12;
 
 // ---- Recent searches: ["frieren", "one piece", ...] newest first ----
-export const recentStore = createStore("search:recent", []);
+export const recentStore = createStore("search:recent", [], { validate: validateStringArray });
 
 export function rememberSearch(term) {
   const text = term.trim();
@@ -18,7 +19,7 @@ export const clearRecentSearches = () => recentStore.set([]);
 export const useRecentSearches = () => useStore(recentStore);
 
 // ---- Saved filter presets: [{ id, name, genre, year, format, status, sort }] ----
-export const presetStore = createStore("search:presets", []);
+export const presetStore = createStore("search:presets", [], { validate: validatePresets });
 
 export function savePreset(name, filters) {
   const clean = name.trim().slice(0, 30);

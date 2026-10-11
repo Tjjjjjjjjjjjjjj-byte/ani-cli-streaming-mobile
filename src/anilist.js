@@ -1,5 +1,7 @@
 import { API_BASE } from "./api";
 import { getSettings } from "./store/settings";
+import { syncListEntry } from "./store/watchlist";
+import { CARD_FIELDS, DISCOVER_BATCH, chunk, firstScreenSections, discoverSections, rowFromCards, sectionQuery } from "../shared/discoverRows.js";
 
 const ENDPOINT = "https://graphql.anilist.co";
 // Read at call time so flipping the switch in Settings takes effect without a reload.
@@ -213,53 +215,18 @@ export function searchAnime(body, signal) {
   return waitFor(job, signal);
 }
 
-const DISCOVER_GENRES = [
-  "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
-  "Mystery", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural",
-];
-const DISCOVER_BATCH = 3;
-const CARD_FIELDS =
-  "id title { romaji english } coverImage { large } episodes status format seasonYear averageScore genres startDate { year month day }";
-const HERO_FIELDS = `${CARD_FIELDS} bannerImage trailer { id site } description(asHtml: false)`;
-
-function currentSeason(now = new Date()) {
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  if (month <= 1) return { season: "WINTER", year };
-  if (month <= 4) return { season: "SPRING", year };
-  if (month <= 7) return { season: "SUMMER", year };
-  if (month <= 10) return { season: "FALL", year };
-  return { season: "WINTER", year: year + 1 };
+// Runs one AniList request for up to DISCOVER_BATCH sections and returns [{ sec, media }].
+async function loadSections(batch) {
+  const adult = allowAdult();
+  const query = `query { ${batch.map((sec, i) => sectionQuery(sec, i, adult)).join("\n")} }`;
+  const data = await direct(query, {});
+  return batch.map((sec, i) => ({ sec, media: data[`s${i}`].media }));
 }
 
+// First screen: the hero and the first rows. Everything else is fetched on demand (fetchDiscoverRows).
 async function buildDiscover() {
-  const { season, year } = currentSeason();
-  const sections = [
-    { id: "trending", title: "Trending now", args: "sort: TRENDING_DESC", perPage: 25, hero: true },
-    { id: "season", title: "Airing this season", args: `season: ${season}, seasonYear: ${year}, sort: POPULARITY_DESC` },
-    { id: "top", title: "All-time favourites", args: "sort: SCORE_DESC" },
-    ...DISCOVER_GENRES.map((genre) => ({
-      id: `genre-${genre.toLowerCase().replaceAll(" ", "-")}`,
-      title: genre,
-      args: `genre: "${genre}", sort: POPULARITY_DESC`,
-    })),
-  ];
-
-  const batches = [];
-  for (let i = 0; i < sections.length; i += DISCOVER_BATCH) batches.push(sections.slice(i, i + DISCOVER_BATCH));
-
-  const settled = await Promise.allSettled(
-    batches.map(async (batch) => {
-      const lists = batch
-        .map(
-          (sec, i) =>
-            `s${i}: Page(perPage: ${sec.perPage ?? 20}) { media(type: ANIME${allowAdult() ? "" : ", isAdult: false"}, ${sec.args}) { ${sec.hero ? HERO_FIELDS : CARD_FIELDS} } }`,
-        )
-        .join("\n");
-      const data = await direct(`query { ${lists} }`, {});
-      return batch.map((sec, i) => ({ sec, media: data[`s${i}`].media }));
-    }),
-  );
+  const sections = firstScreenSections();
+  const settled = await Promise.allSettled(chunk(sections, DISCOVER_BATCH).map(loadSections));
 
   const loaded = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   if (loaded.length === 0) throw settled[0].reason;
@@ -272,21 +239,47 @@ async function buildDiscover() {
     .map((m) => ({ ...toCard(m), banner: m.bannerImage, trailer: m.trailer?.id ? { id: m.trailer.id, site: m.trailer.site } : null, description: cleanDescription(m.description) }));
 
   const rows = loaded
-    .map(({ sec, media }) => ({
-      id: sec.id,
-      title: sec.title,
-      items: media.filter((m) => m.coverImage?.large).slice(0, 20).map(toCard),
-    }))
-    .filter((row) => row.items.length >= 4);
+    .map(({ sec, media }) => rowFromCards(sec, media.filter((m) => m.coverImage?.large).map(toCard)))
+    .filter(Boolean);
 
   return { hero, rows, partial: settled.some((r) => r.status !== "fulfilled") };
 }
 
+// Drop answers cached by earlier versions of the discover rows.
+try {
+  localStorage.removeItem("al:discover2:safe");
+  localStorage.removeItem("al:discover2:adult");
+} catch {
+  // Storage blocked: nothing to clean.
+}
+
 export function fetchDiscover(signal) {
   const job = cached(
-    `discover2:${allowAdult() ? "adult" : "safe"}`,
+    `discover3:${allowAdult() ? "adult" : "safe"}`,
     LIST_TTL,
     () => directThenServer(buildDiscover, () => server(`/discover${allowAdult() ? "?adult=1" : ""}`)),
+    true,
+  );
+  return waitFor(job, signal);
+}
+
+// Rows below the first screen: up to DISCOVER_BATCH row ids per call (one AniList request).
+// Returns [{ id, title, items }], skipping rows that came back with too few items.
+export function fetchDiscoverRows(ids, signal) {
+  const wanted = discoverSections().filter((s) => ids.includes(s.id)).slice(0, DISCOVER_BATCH);
+  if (wanted.length === 0) return Promise.resolve([]);
+  const adult = allowAdult();
+  const job = cached(
+    `discover3:rows:${wanted.map((s) => s.id).join(",")}:${adult ? "adult" : "safe"}`,
+    LIST_TTL,
+    () =>
+      directThenServer(
+        async () => {
+          const loaded = await loadSections(wanted);
+          return loaded.map(({ sec, media }) => rowFromCards(sec, media.filter((m) => m.coverImage?.large).map(toCard))).filter(Boolean);
+        },
+        async () => (await server(`/discover?rows=${wanted.map((s) => s.id).join(",")}${adult ? "&adult=1" : ""}`)).rows ?? [],
+      ),
     true,
   );
   return waitFor(job, signal);
@@ -382,8 +375,23 @@ export function fetchDetails(id, signal) {
         () => server(`/anime/${numeric}${allowAdult() ? "?adult=1" : ""}`),
       ),
     true,
-  );
+  ).then((details) => {
+    // Details are the source of truth for the episode count: keep the list entry in step with them.
+    if (details?.id) syncListEntry(details);
+    return details;
+  });
   return waitFor(job, signal);
+}
+
+// Full details have airing info (availableEpisodes); the lightweight objects passed between pages don't.
+// Returns `known` when it already is the full thing, otherwise loads the details. Falls back to `known` if offline.
+export async function loadFullDetails(id, known) {
+  if (known && "availableEpisodes" in known) return known;
+  try {
+    return (await fetchDetails(id)) ?? known ?? null;
+  } catch {
+    return known ?? null;
+  }
 }
 
 export function animeBasics(id) {
