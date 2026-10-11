@@ -1,9 +1,0 @@
-.search-page {
-  max-width: var(--page-width);
-  margin: 0 auto;
-  padding: clamp(32px, 6vw, 72px) var(--gutter) 96px;
-}
-
-.empty-note {
-  color: var(--muted);
-}

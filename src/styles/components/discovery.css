@@ -1,0 +1,201 @@
+/* Similar-to-this rows, recent searches, saved filter presets. */
+.similar {
+  --row-max: var(--page-width);
+  padding-bottom: 64px;
+}
+
+.similar--watch {
+  margin-top: 12px;
+}
+
+.similar .row {
+  padding-top: 36px;
+}
+
+/* Recent searches dropdown under the navbar search box. */
+.recent {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 16px 36px rgb(0 0 0 / 0.5);
+  animation: card-in 0.15s ease-out;
+}
+
+.recent__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.recent__head button {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recent ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent li {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+}
+
+.recent li:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+
+.recent__term {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent__term .material-symbols-outlined {
+  color: var(--muted);
+  font-size: 20px;
+}
+
+.recent__remove {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.recent__remove .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Saved filter presets, inside the filter panel. */
+.filters__presets {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.preset {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.preset button,
+.preset__save {
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.preset__apply {
+  height: 36px;
+  padding: 0 6px 0 14px;
+}
+
+.preset__remove {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--muted) !important;
+}
+
+.preset__remove .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.preset:hover {
+  border-color: var(--accent);
+}
+
+.preset__save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px dashed var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.preset__save .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.badge--new {
+  top: auto;
+  right: auto;
+  bottom: 8px;
+  left: 8px;
+  background: var(--accent);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+/* Five navbar icons don't fit beside the search box on a phone: search drops to its own row. */
+@media (max-width: 520px) {
+  .navbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 8px;
+  }
+
+  .navbar .home-btn {
+    margin-right: auto;
+  }
+
+  .navbar .search-form {
+    order: 10;
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recent {
+    animation: none;
+  }
+}
