@@ -19,6 +19,7 @@ import { canAutoDownload } from "./store/network";
 import { useSavedEpisodes } from "./library/useSavedEpisodes";
 import { deleteFromLibrary } from "./library/useLibrary";
 import { episodeKey } from "./library/cleanup";
+import SimilarRow from "./discover/SimilarRow";
 
 function WatchPage() {
   const { id, episode: episodeParam } = useParams();
@@ -241,6 +242,8 @@ function WatchPage() {
           </aside>
         )}
       </div>
+    
+      <SimilarRow animeId={id} className="similar--watch" />
     </main>
   );
 }

@@ -40,9 +40,52 @@ export const detailsQuery = `
       averageScore
       genres
       startDate { year month day }
+      relations {
+        edges {
+          relationType(version: 2)
+          node {
+            id
+            type
+            isAdult
+            format
+            status
+            episodes
+            title { romaji english }
+            coverImage { large }
+            startDate { year month day }
+          }
+        }
+      }
     }
   }
 `;
+
+// Direct relations of a title, arranged as a rough watch order:
+// prequels (oldest first), then sequels and the rest. AniList only returns one hop of the graph.
+const RELATION_ORDER = ["PREQUEL", "PARENT", "SEQUEL", "SIDE_STORY", "SPIN_OFF", "ALTERNATIVE", "SUMMARY", "OTHER"];
+const startKey = (d) => (d?.year ?? 9999) * 10000 + (d?.month ?? 0) * 100 + (d?.day ?? 0);
+
+export function toRelations(relations, allowAdult = false) {
+  const edges = relations?.edges ?? [];
+  return edges
+    .filter((e) => e.node?.type === "ANIME" && e.node.coverImage?.large && (allowAdult || !e.node.isAdult))
+    .filter((e) => RELATION_ORDER.includes(e.relationType))
+    .map((e) => ({
+      id: e.node.id,
+      relation: e.relationType,
+      title: e.node.title.english || e.node.title.romaji,
+      cover: e.node.coverImage.large,
+      format: e.node.format,
+      status: e.node.status,
+      episodes: e.node.episodes,
+      releaseDate: e.node.startDate,
+    }))
+    .sort(
+      (a, b) =>
+        RELATION_ORDER.indexOf(a.relation) - RELATION_ORDER.indexOf(b.relation) ||
+        startKey(a.releaseDate) - startKey(b.releaseDate),
+    );
+}
 
 export function cleanDescription(text) {
   if (!text) return null;

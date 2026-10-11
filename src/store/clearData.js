@@ -3,9 +3,10 @@ import { historyStore } from "./history";
 import { statsStore } from "./stats";
 import { watchlistStore } from "./watchlist";
 import { showPrefsStore } from "./showPrefs";
+import { presetStore, recentStore } from "./searchStore";
 
 const PERSONAL_PREFIXES = ["progress:", "pos:", "player:", "episodes:"];
-const PERSONAL_KEYS = ["settings:v1", "hist:v1", "stats:v1", "watchlist:v1", "showprefs:v1"];
+const PERSONAL_KEYS = ["settings:v1", "hist:v1", "stats:v1", "watchlist:v1", "showprefs:v1", "search:recent", "search:presets"];
 
 const isPersonal = (key) => PERSONAL_KEYS.includes(key) || PERSONAL_PREFIXES.some((p) => key.startsWith(p));
 
@@ -54,5 +55,5 @@ export function clearAllPersonalData() {
   } catch {
     // ignore
   }
-  [settingsStore, historyStore, statsStore, watchlistStore, showPrefsStore].forEach((s) => s.reset());
+  [settingsStore, historyStore, statsStore, watchlistStore, showPrefsStore, recentStore, presetStore].forEach((s) => s.reset());
 }

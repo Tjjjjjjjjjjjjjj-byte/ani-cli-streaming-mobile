@@ -12,6 +12,7 @@ export function useDiscover() {
       .catch((err) => {
         if (err.name === "AbortError") return;
         setResult({
+          limited: err.status === 429,
           error:
             err.status === 429
               ? "AniList is limiting requests right now. Wait a minute, then try again."
@@ -28,7 +29,7 @@ export function useDiscover() {
 
   const status = !result ? "loading" : result.error ? "error" : "ready";
   return [
-    { status, hero: result?.data?.hero ?? [], rows: result?.data?.rows ?? [], error: result?.error ?? null },
+    { status, hero: result?.data?.hero ?? [], rows: result?.data?.rows ?? [], error: result?.error ?? null, limited: result?.limited ?? false },
     reload,
   ];
 }

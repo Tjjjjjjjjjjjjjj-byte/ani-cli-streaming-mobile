@@ -1,11 +1,37 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { FORMAT_LABELS } from "../utils/animeFormat";
+import { fetchAiringStatus } from "../anilist";
+import { FORMAT_LABELS, airsIn } from "../utils/animeFormat";
 import { LIST_STATUSES, setListStatus, useWatchlist } from "../store/watchlist";
+
+// An episode is out that's later than the last one you finished.
+function hasNewEpisode(id, status) {
+  if (!status?.available) return false;
+  try {
+    const p = JSON.parse(localStorage.getItem(`progress:${id}`));
+    const watched = Array.isArray(p?.watched) ? p.watched : [];
+    const latestSeen = watched.length ? Math.max(...watched) : 0;
+    return status.available > latestSeen && status.next != null;
+  } catch {
+    return false;
+  }
+}
 
 function WatchlistPage() {
   const list = useWatchlist();
   const [tab, setTab] = useState("watching");
+  const [airing, setAiring] = useState({});
+  const idsKey = list.map((a) => a.id).join(",");
+
+  // One request for the whole list: which shows have an episode out that you haven't watched?
+  useEffect(() => {
+    if (!idsKey) return;
+    const controller = new AbortController();
+    fetchAiringStatus(idsKey.split(",").map(Number), controller.signal)
+      .then(setAiring)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [idsKey]);
 
   useEffect(() => {
     document.title = "My list";
@@ -46,9 +72,16 @@ function WatchlistPage() {
                   {anime.cover && <img src={anime.cover} alt={anime.title} loading="lazy" />}
                   {anime.rating != null && <span className="badge badge--score">★ {(anime.rating / 10).toFixed(1)}</span>}
                   {FORMAT_LABELS[anime.format] && <span className="badge badge--format">{FORMAT_LABELS[anime.format]}</span>}
+                  {anime.status === "watching" && hasNewEpisode(anime.id, airing[anime.id]) && <span className="badge badge--new">New episode</span>}
                 </div>
                 <h3 className="anime-card__title" title={anime.title}>{anime.title}</h3>
-                {anime.episodes != null && <p className="anime-card__date">{anime.episodes} episodes</p>}
+                {airing[anime.id]?.next ? (
+                  <p className="anime-card__date">
+                    E{airing[anime.id].next.episode} · {airsIn(airing[anime.id].next.airingAt)}
+                  </p>
+                ) : (
+                  anime.episodes != null && <p className="anime-card__date">{anime.episodes} episodes</p>
+                )}
               </Link>
               <select
                 className="watchlist__move"

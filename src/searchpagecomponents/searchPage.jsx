@@ -4,6 +4,8 @@ import AnimeCard from "../ani-cliComponentes/animeCard";
 import Pagination from "./pagination";
 import SearchFilters from "./SearchFilters";
 import { searchAnime } from "../anilist";
+import RetryButton from "../ui/RetryButton";
+import { useRefreshHandler } from "../ui/PullToRefresh";
 
 function SearchPage() {
   const [params, setParams] = useSearchParams();
@@ -21,6 +23,12 @@ function SearchPage() {
   const key = [q, genre, year, format, status, sort, page].join("|");
 
   const [state, setState] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => {
+    setState(null);
+    setAttempt((n) => n + 1);
+  };
+  useRefreshHandler(retry);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -37,11 +45,11 @@ function SearchPage() {
       .catch((err) => {
         if (err.name === "AbortError") return;
         console.error("Search failed:", err);
-        setState({ key, results: [], pageInfo: null, error: err.message });
+        setState({ key, results: [], pageInfo: null, error: err.message, limited: err.status === 429 });
       });
 
     return () => controller.abort();
-  }, [q, page, genre, year, format, status, sort, key]);
+  }, [q, page, genre, year, format, status, sort, key, attempt]);
 
   function updateParams(changes) {
     const next = { q, ...filters, ...changes };
@@ -74,6 +82,7 @@ function SearchPage() {
         hasTerm={Boolean(q)}
         onChange={(name, value) => updateParams({ [name]: value, page: "" })}
         onClear={() => updateParams({ genre: "", year: "", format: "", status: "", page: "" })}
+        onApply={(p) => updateParams({ genre: p.genre ?? "", year: p.year ?? "", format: p.format ?? "", status: p.status ?? "", sort: p.sort ?? "", page: "" })}
       />
 
       {loading && results.length === 0 && (
@@ -88,7 +97,13 @@ function SearchPage() {
         </div>
       )}
 
-      {error && <p className="empty-note">Couldn’t load results. {error}</p>}
+      {error && (
+        <div className="discover__message" role="alert">
+          <span className="material-symbols-outlined" aria-hidden="true">cloud_off</span>
+          <p>Couldn’t load results. {error}</p>
+          <RetryButton onRetry={retry} auto={state?.limited} />
+        </div>
+      )}
 
       {!loading && !error && results.length === 0 && (
         <p className="empty-note">

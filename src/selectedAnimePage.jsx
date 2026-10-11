@@ -15,9 +15,12 @@ import { getPosition } from "./store/history";
 import { getShowPrefs, setShowPrefs } from "./store/showPrefs";
 import { useSavedEpisodes } from "./library/useSavedEpisodes";
 import WatchlistButton from "./watch/WatchlistButton";
+import SimilarRow from "./discover/SimilarRow";
 import AiringCountdown from "./AiringCountdown";
 import { fetchDetails } from "./anilist";
-import { TrailerBackground } from "./Trailer";
+import { TrailerBackground, TrailerPlayer } from "./Trailer";
+import RelatedList from "./discover/RelatedList";
+import RetryButton from "./ui/RetryButton";
 
 function formatSpot(seconds) {
   const m = Math.floor(seconds / 60);
@@ -33,6 +36,8 @@ function SelectedAnimePage() {
     String(location.state?.anime?.id) === id ? location.state.anime : null;
 
   const [result, setResult] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+  const [tab, setTab] = useState("episodes");
   const [copied, setCopied] = useState(false);
   const [lang, setLangState] = useState(() => (getShowPrefs(id).lang === "dub" ? "dub" : "sub"));
   const setLang = (next) => {
@@ -54,11 +59,21 @@ function SelectedAnimePage() {
       .catch((err) => {
         if (err.name === "AbortError") return;
         console.error("Details failed:", err);
-        setResult({ id, data: null, error: err.message });
+        setResult({ id, data: null, error: err.message, status: err.status });
       });
 
     return () => controller.abort();
+  }, [id, attempt]);
+
+  // A different anime starts on its episodes again.
+  useEffect(() => {
+    setTab("episodes");
   }, [id]);
+
+  function retry() {
+    setResult(null);
+    setAttempt((n) => n + 1);
+  }
 
   async function handleShare() {
     try {
@@ -93,11 +108,30 @@ function SelectedAnimePage() {
   }, [shown]);
 
   if (!anime) {
+    if (finished?.error) {
+      return (
+        <main className="series">
+          <div className="discover__message" role="alert">
+            <span className="material-symbols-outlined" aria-hidden="true">cloud_off</span>
+            <p>Couldn’t load this anime. {finished.error}</p>
+            <RetryButton onRetry={retry} auto={finished.status === 429} />
+          </div>
+        </main>
+      );
+    }
     return (
-      <main className="series">
-        <p className="empty-note series__note" role="status">
-          {finished?.error ? `Couldn’t load this anime. ${finished.error}` : "Loading…"}
-        </p>
+      <main className="series series--loading" aria-busy="true" aria-label="Loading anime">
+        <div className="series-skeleton__hero skeleton" />
+        <div className="series-skeleton__body">
+          <div className="skeleton skeleton--title" />
+          <div className="skeleton series-skeleton__line" />
+          <div className="skeleton series-skeleton__line series-skeleton__line--short" />
+          <div className="series-skeleton__grid">
+            {Array.from({ length: 12 }, (_, i) => (
+              <div className="skeleton series-skeleton__ep" key={i} />
+            ))}
+          </div>
+        </div>
       </main>
     );
   }
@@ -136,6 +170,26 @@ function SelectedAnimePage() {
   ].filter(([, value]) => value != null && value !== "");
 
   const hasBanner = Boolean(anime.banner);
+  const relations = anime.relations ?? [];
+  const tabs = [
+    ["episodes", "Episodes", null],
+    ["related", "Related", relations.length || null],
+    ...(anime.trailer ? [["trailer", "Trailer", null]] : []),
+  ];
+  const activeTab = tabs.some(([key]) => key === tab) ? tab : "episodes";
+
+  function onTabKey(e) {
+    const i = tabs.findIndex(([key]) => key === activeTab);
+    let next = i;
+    if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = tabs.length - 1;
+    else return;
+    e.preventDefault();
+    setTab(tabs[next][0]);
+    document.getElementById(`series-tab-${tabs[next][0]}`)?.focus();
+  }
 
   return (
     <main className="series" ref={pageRef}>
@@ -219,32 +273,62 @@ function SelectedAnimePage() {
             <p className="empty-note series__error">Couldn’t load the full details. {finished.error}</p>
           )}
 
-          {(available ?? 0) > 0 ? (
-            <EpisodeList
-              animeId={id}
-              total={available}
-              lang={lang}
-              onSelectLang={setLang}
-              download={download}
-              onDownload={startDownload}
-              onDownloadAll={startDownloadAll}
-              infoLoading={infoLoading}
-              linkState={{ anime }}
-              info={episodeInfo}
-              watched={progress.watched}
-              saved={saved}
-              allowRich
-              className="episodes--grid"
-            />
-          ) : (
-            <p className="empty-note">No episodes are available to watch yet.</p>
-          )}
+          <div className="series-nav" role="tablist" aria-label="Anime sections" onKeyDown={onTabKey}>
+            {tabs.map(([key, label, count]) => (
+              <button
+                key={key}
+                id={`series-tab-${key}`}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === key}
+                aria-controls={`series-panel-${key}`}
+                tabIndex={activeTab === key ? 0 : -1}
+                className={`series-nav__tab${activeTab === key ? " is-active" : ""}`}
+                onClick={() => setTab(key)}
+              >
+                {label}
+                {count != null && <span className="series-nav__count">{count}</span>}
+              </button>
+            ))}
+          </div>
+
+          <div id={`series-panel-${activeTab}`} role="tabpanel" aria-labelledby={`series-tab-${activeTab}`}>
+            {activeTab === "episodes" &&
+              ((available ?? 0) > 0 ? (
+                <EpisodeList
+                  animeId={id}
+                  total={available}
+                  lang={lang}
+                  onSelectLang={setLang}
+                  download={download}
+                  onDownload={startDownload}
+                  onDownloadAll={startDownloadAll}
+                  infoLoading={infoLoading}
+                  linkState={{ anime }}
+                  info={episodeInfo}
+                  watched={progress.watched}
+                  saved={saved}
+                  allowRich
+                  className="episodes--grid"
+                />
+              ) : (
+                <p className="empty-note">No episodes are available to watch yet.</p>
+              ))}
+
+            {activeTab === "related" && <RelatedList relations={relations} title={anime.title} />}
+
+            {activeTab === "trailer" && anime.trailer && (
+              <TrailerPlayer key={anime.trailer.id} trailer={anime.trailer} title={anime.title} />
+            )}
+          </div>
         </div>
 
         <aside className="series-body__side">
           <SeriesSidebar details={details} genres={anime.genres ?? []} themes={themes} />
         </aside>
       </div>
+
+      <SimilarRow animeId={id} />
     </main>
   );
 }

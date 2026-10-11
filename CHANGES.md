@@ -15,3 +15,14 @@ Where things live:
 - src/library/DownloadQueue.jsx, StorageMeter.jsx, cleanup.js, useSavedEpisodes.js
 - src/settings/*        Settings page, My list page
 - backend/servers.js    pause/resume/cancel endpoints, per-request adult flag
+
+## Polish round (third)
+- Anime page: tabs for Episodes / Related / Trailer. "Related" lists direct prequels and parents first, then sequels, side stories and spin-offs (AniList only gives one hop, so a long franchise may need a click through to the next title).
+- Episode list: "Hide filler" toggle (remembered; never hides the episode you are on).
+- Phones: bottom navigation bar (Home, Search, My list, Schedule, Library) with a download badge. Hidden on the watch pages.
+- Pull-to-refresh on touch devices. Home, search and schedule reload just their own data; other pages reload the app.
+- Back/Forward restores your scroll position. New pages start at the top.
+- Errors (home, search, schedule, anime page) show "Retry now (auto in 30s)". Rate-limit errors retry on their own up to 3 times.
+- Anime page shows a skeleton while loading instead of "Loading…".
+- Accessibility: skip-to-content link, consistent focus rings, 44px touch targets on phones.
+- Files: src/ui/* (BottomNav, PullToRefresh, ScrollMemory, RetryButton, SkipLink), src/discover/RelatedList.jsx, src/styles/components/mobile-ui.css

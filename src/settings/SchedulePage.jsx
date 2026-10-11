@@ -5,6 +5,8 @@ import { FORMAT_LABELS, airsIn } from "../utils/animeFormat";
 import { watchlistStore } from "../store/watchlist";
 import { useStore } from "../store/storage";
 import { useSettings } from "../store/settings";
+import RetryButton from "../ui/RetryButton";
+import { useRefreshHandler } from "../ui/PullToRefresh";
 
 const DAYS = 7;
 
@@ -23,6 +25,7 @@ function SchedulePage() {
   const [mineOnly, setMineOnly] = useState(false);
   const [state, setState] = useState({ key: null, items: [], error: null });
   const [tick, setTick] = useState(0);
+  useRefreshHandler(() => setTick((n) => n + 1));
   const [now, setNow] = useState(() => Date.now());
   const list = useStore(watchlistStore);
   const [settings] = useSettings();
@@ -60,7 +63,7 @@ function SchedulePage() {
       .then((items) => setState({ key, items, error: null }))
       .catch((err) => {
         if (err.name !== "AbortError") {
-          setState({ key, items: [], error: err.status === 429 ? "AniList is limiting requests right now. Wait a minute, then try again." : err.message });
+          setState({ key, items: [], limited: err.status === 429, error: err.status === 429 ? "AniList is limiting requests right now. Wait a minute, then try again." : err.message });
         }
       });
     return () => controller.abort();
@@ -116,7 +119,7 @@ function SchedulePage() {
         <div className="discover__message" role="alert">
           <span className="material-symbols-outlined" aria-hidden="true">cloud_off</span>
           <p>Couldn’t load the schedule. {state.error}</p>
-          <button type="button" className="btn btn--outline" onClick={() => setTick((n) => n + 1)}>Try again</button>
+          <RetryButton onRetry={() => setTick((n) => n + 1)} auto={state.limited} />
         </div>
       )}
 

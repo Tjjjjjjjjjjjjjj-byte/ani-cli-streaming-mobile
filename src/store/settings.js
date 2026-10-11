@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
   wifiOnly: true,
   deleteAfterWatching: false,
   saveZipToDevice: true,
+  // Search
+  searchAsYouType: true,
+  saveSearches: true,
   // Privacy
   saveHistory: true,
   collectStats: true,

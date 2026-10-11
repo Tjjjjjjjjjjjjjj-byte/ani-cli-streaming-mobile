@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ALLOW_ADULT } from "../config.js";
 import { getLink } from "../anime.mjs";
-import { aniList, cleanDescription, detailsQuery } from "../lib/anilist.js";
+import { aniList, cleanDescription, detailsQuery, toRelations } from "../lib/anilist.js";
 import { originOf, proxied } from "./proxy.js";
 
 const router = Router();
@@ -39,6 +39,7 @@ router.get("/anime/:id", async (req, res) => {
       rating: m.averageScore,
       genres: m.genres ?? [],
       releaseDate: m.startDate,
+      relations: toRelations(m.relations, ALLOW_ADULT),
     });
   } catch (error) {
     console.error("Details failed:", error);

@@ -299,8 +299,45 @@ const detailsQuery = `
       coverImage { extraLarge } bannerImage trailer { id site } episodes
       nextAiringEpisode { episode airingAt } duration status format averageScore genres
       startDate { year month day }
+      relations {
+        edges {
+          relationType(version: 2)
+          node {
+            id type isAdult format status episodes
+            title { romaji english } coverImage { large } startDate { year month day }
+          }
+        }
+      }
     }
   }`;
+
+// Direct relations of a title, arranged as a rough watch order:
+// prequels (oldest first), then sequels and the rest. AniList only returns one hop of the graph.
+const RELATION_ORDER = ["PREQUEL", "PARENT", "SEQUEL", "SIDE_STORY", "SPIN_OFF", "ALTERNATIVE", "SUMMARY", "OTHER"];
+const startKey = (d) => (d?.year ?? 9999) * 10000 + (d?.month ?? 0) * 100 + (d?.day ?? 0);
+
+function toRelations(relations) {
+  const adult = allowAdult();
+  const edges = relations?.edges ?? [];
+  return edges
+    .filter((e) => e.node?.type === "ANIME" && e.node.coverImage?.large && (adult || !e.node.isAdult))
+    .filter((e) => RELATION_ORDER.includes(e.relationType))
+    .map((e) => ({
+      id: e.node.id,
+      relation: e.relationType,
+      title: e.node.title.english || e.node.title.romaji,
+      cover: e.node.coverImage.large,
+      format: e.node.format,
+      status: e.node.status,
+      episodes: e.node.episodes,
+      releaseDate: e.node.startDate,
+    }))
+    .sort(
+      (a, b) =>
+        RELATION_ORDER.indexOf(a.relation) - RELATION_ORDER.indexOf(b.relation) ||
+        startKey(a.releaseDate) - startKey(b.releaseDate),
+    );
+}
 
 function toDetails(m) {
   return {
@@ -322,13 +359,14 @@ function toDetails(m) {
     rating: m.averageScore,
     genres: m.genres ?? [],
     releaseDate: m.startDate,
+    relations: toRelations(m.relations),
   };
 }
 
 export function fetchDetails(id, signal) {
   const numeric = Number(id);
   const job = cached(
-    `details2:${numeric}:${allowAdult() ? "adult" : "safe"}`,
+    `details3:${numeric}:${allowAdult() ? "adult" : "safe"}`,
     DETAILS_TTL,
     () =>
       directThenServer(
@@ -352,4 +390,92 @@ export function animeBasics(id) {
   return fetchDetails(id)
     .then((d) => ({ title: d.title, malId: d.malId ?? null }))
     .catch(() => null);
+}
+
+// ---------- Discovery: similar titles, airing schedule, "new episode" status ----------
+
+const similarQuery = `
+  query ($id: Int) {
+    Media(id: $id, type: ANIME) {
+      recommendations(sort: RATING_DESC, perPage: 25) {
+        nodes { rating mediaRecommendation { isAdult ${CARD_FIELDS} } }
+      }
+    }
+  }`;
+
+// Titles other AniList users recommend for this one, best-rated first.
+export function fetchSimilar(id, signal) {
+  const adult = allowAdult();
+  const job = cached(
+    `similar:${Number(id)}:${adult ? "adult" : "safe"}`,
+    DETAILS_TTL,
+    async () => {
+      const data = await direct(similarQuery, { id: Number(id) });
+      const nodes = data.Media?.recommendations?.nodes ?? [];
+      return nodes
+        .filter((n) => n.rating > 0 && n.mediaRecommendation?.coverImage?.large && (adult || !n.mediaRecommendation.isAdult))
+        .map((n) => toCard(n.mediaRecommendation))
+        .slice(0, 18);
+    },
+    true,
+  );
+  return waitFor(job, signal);
+}
+
+const airingQuery = `
+  query ($from: Int, $to: Int, $page: Int) {
+    Page(page: $page, perPage: 50) {
+      pageInfo { hasNextPage }
+      airingSchedules(airingAt_greater: $from, airingAt_lesser: $to, sort: TIME) {
+        airingAt
+        episode
+        media { isAdult ${CARD_FIELDS} }
+      }
+    }
+  }`;
+
+// Everything airing in the 24 hours after dayStart (unix seconds). Cached per day for half an hour.
+export function fetchAiringDay(dayStart, signal) {
+  const adult = allowAdult();
+  const job = cached(`airing:${dayStart}:${adult ? "adult" : "safe"}`, LIST_TTL, async () => {
+    const rows = [];
+    for (let page = 1; page <= 8; page++) {
+      const data = await direct(airingQuery, { from: dayStart - 1, to: dayStart + 86_400, page });
+      rows.push(...data.Page.airingSchedules);
+      if (!data.Page.pageInfo.hasNextPage) break;
+    }
+    const seen = new Set();
+    return rows
+      .filter((r) => r.media && r.media.coverImage?.large && r.media.format !== "MUSIC" && (adult || !r.media.isAdult))
+      .filter((r) => {
+        const key = `${r.media.id}:${r.episode}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((r) => ({ airingAt: r.airingAt, episode: r.episode, anime: toCard(r.media) }));
+  });
+  return waitFor(job, signal);
+}
+
+// For a list of ids: when does the next episode air, and how many are out already?
+export function fetchAiringStatus(ids, signal) {
+  const list = [...new Set(ids.map(Number))].sort((a, b) => a - b).slice(0, 50);
+  if (list.length === 0) return Promise.resolve({});
+  const job = cached(`status:${list.join(",")}`, 15 * MINUTE, async () => {
+    const data = await direct(
+      `query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { id status episodes nextAiringEpisode { episode airingAt } } } }`,
+      { ids: list },
+    );
+    return Object.fromEntries(
+      data.Page.media.map((m) => [
+        m.id,
+        {
+          next: m.nextAiringEpisode ? { episode: m.nextAiringEpisode.episode, airingAt: m.nextAiringEpisode.airingAt } : null,
+          available: m.nextAiringEpisode ? m.nextAiringEpisode.episode - 1 : m.episodes,
+        },
+      ]),
+    );
+  });
+  return waitFor(job, signal);
 }

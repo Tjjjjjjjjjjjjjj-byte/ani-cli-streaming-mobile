@@ -7,6 +7,7 @@ import { usePlayerPrefs } from "../watch/useEpisode";
 import { useSettings } from "../store/settings";
 import { statsStore, formatDuration, summarize } from "../store/stats";
 import { useStore } from "../store/storage";
+import { clearRecentSearches } from "../store/searchStore";
 import { clearAllPersonalData, clearHistoryData, clearStatsData, exportPersonalData } from "../store/clearData";
 import { formatBytes } from "../utils/animeFormat";
 import { Row, Section, Segmented, Switch } from "./controls";
@@ -239,6 +240,22 @@ function SettingsPage() {
             </Row>
           </>
         )}
+      </Section>
+
+      <Section icon="search" title="Search">
+        <Row label="Search as you type" hint="Show results after you pause typing, without pressing Enter.">
+          <Switch label="Search as you type" checked={settings.searchAsYouType} onChange={(v) => update({ searchAsYouType: v })} />
+        </Row>
+        <Row label="Remember recent searches" hint="Shown under the search box. Saved filter presets are kept separately.">
+          <Switch
+            label="Remember recent searches"
+            checked={settings.saveSearches}
+            onChange={(v) => {
+              update({ saveSearches: v });
+              if (!v) clearRecentSearches();
+            }}
+          />
+        </Row>
       </Section>
 
       <Section icon="shield" title="Content">

@@ -13,6 +13,8 @@
 @import "./components/player-extras.css";
 @import "./components/continue.css";
 @import "./components/queue.css";
+@import "./components/discovery.css";
+@import "./components/mobile-ui.css";
 
 @import "./pages/discover.css";
 @import "./pages/search.css";
@@ -21,6 +23,7 @@
 @import "./pages/downloads.css";
 @import "./pages/watchlist.css";
 @import "./pages/settings.css";
+@import "./pages/schedule.css";
 
 @import "./motion.css";
 

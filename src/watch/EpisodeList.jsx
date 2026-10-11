@@ -46,6 +46,13 @@ function EpisodeList({
       return "list";
     }
   });
+  const [hideFiller, setHideFiller] = useState(() => {
+    try {
+      return localStorage.getItem("episodes:hideFiller") === "1";
+    } catch {
+      return false;
+    }
+  });
   const scrollRef = useRef(null);
   const currentRef = useRef(null);
   const lastClicked = useRef(null);
@@ -63,18 +70,33 @@ function EpisodeList({
     }
   }
 
+  const hasFiller = allowRich && Object.values(info).some((e) => e.filler);
+  const skipFiller = hasFiller && hideFiller;
+
+  function toggleFiller() {
+    setHideFiller((v) => {
+      try {
+        localStorage.setItem("episodes:hideFiller", v ? "0" : "1");
+      } catch {
+      }
+      return !v;
+    });
+  }
+
   const numbers = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // Never hide the episode you're on, even if it is filler.
+    const keep = (n) => !(skipFiller && info[n]?.filler && n !== current);
     if (q) {
       const all = Array.from({ length: count }, (_, i) => i + 1);
       return all.filter(
-        (n) => String(n).includes(q) || info[n]?.title?.toLowerCase().includes(q),
+        (n) => keep(n) && (String(n).includes(q) || info[n]?.title?.toLowerCase().includes(q)),
       );
     }
     const start = chunk * CHUNK + 1;
     const end = Math.min(count, start + CHUNK - 1);
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [count, chunk, query, info]);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i).filter(keep);
+  }, [count, chunk, query, info, skipFiller, current]);
 
   useEffect(() => {
     const box = scrollRef.current;
@@ -159,8 +181,22 @@ function EpisodeList({
     >
       <header className="episodes__head">
         <h2 className="episodes__title">Episodes</h2>
-        {(canDownload || hasInfo) && (
+        {(canDownload || hasInfo || hasFiller) && (
           <div className="episodes__actions">
+            {hasFiller && (
+              <button
+                type="button"
+                className={`episodes__select-btn${hideFiller ? " is-on" : ""}`}
+                aria-pressed={hideFiller}
+                onClick={toggleFiller}
+                title="Hide episodes marked as filler"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  {hideFiller ? "visibility_off" : "visibility"}
+                </span>
+                {hideFiller ? "Filler hidden" : "Hide filler"}
+              </button>
+            )}
             {hasInfo && (
               <div className="episodes__view" role="group" aria-label="Episode layout">
                 {[
@@ -270,7 +306,9 @@ function EpisodeList({
             ))}
           </ol>
         ) : numbers.length === 0 ? (
-          <p className="episodes__empty">No episode matches “{query}”.</p>
+          <p className="episodes__empty">
+            {query ? `No episode matches “${query}”.` : "Nothing to show here. Every episode in this range is filler."}
+          </p>
         ) : (
           <ol className="episodes__items">
             {numbers.map((n, index) => {

@@ -76,3 +76,13 @@ export function searchYears(now = new Date()) {
   const latest = now.getFullYear() + 1;
   return Array.from({ length: latest - 1980 + 1 }, (_, i) => latest - i);
 }
+
+// "Airs in 3h" / "Aired 2d ago" from a unix timestamp in seconds.
+export function airsIn(airingAtSeconds, now = Date.now()) {
+  const ms = airingAtSeconds * 1000 - now;
+  const minutes = Math.floor(Math.abs(ms) / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const span = days >= 1 ? `${days}d` : hours >= 1 ? `${hours}h` : `${Math.max(1, minutes)}m`;
+  return ms > 0 ? `Airs in ${span}` : `Aired ${span} ago`;
+}

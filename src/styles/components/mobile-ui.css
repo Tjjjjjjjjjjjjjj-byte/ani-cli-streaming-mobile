@@ -1,0 +1,324 @@
+/* Bottom navigation, pull-to-refresh, tabs and related titles. */
+
+/* ---------- Bottom navigation (phones) ---------- */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 700px), (hover: none) and (pointer: coarse) and (max-width: 900px) {
+  .bottom-nav {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 20;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    border-top: 1px solid var(--line);
+    backdrop-filter: blur(12px);
+  }
+
+  .bottom-nav__tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    padding: 6px 2px;
+    border-radius: 12px;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .bottom-nav__tab .material-symbols-outlined {
+    font-size: 24px;
+  }
+
+  .bottom-nav__tab.is-active {
+    color: var(--accent);
+  }
+
+  .bottom-nav__tab.is-active .material-symbols-outlined {
+    font-variation-settings: "FILL" 1;
+  }
+
+  .bottom-nav__tab:active {
+    background: var(--line);
+  }
+
+  /* Make room so the bar never covers the end of a page. */
+  body:has(.bottom-nav) #root {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
+
+  /* The bar replaces these three icon buttons; home, search and settings stay up top. */
+  .navbar .nav-extra {
+    display: none;
+  }
+
+  .navbar {
+    gap: 12px;
+  }
+
+  .bottom-nav__tab {
+    position: relative;
+  }
+
+  .bottom-nav__badge {
+    position: absolute;
+    top: 2px;
+    left: calc(50% + 6px);
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--ink);
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 16px;
+    text-align: center;
+  }
+}
+
+/* ---------- Pull to refresh ---------- */
+.ptr {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 64px);
+  left: 50%;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+
+.ptr.is-ready {
+  color: var(--accent);
+}
+
+.ptr.is-busy .ptr__icon {
+  animation: ptr-spin 0.9s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Anime page tabs ---------- */
+.series-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.series-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.series-nav__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.series-nav__tab:hover {
+  color: var(--text);
+}
+
+.series-nav__tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.series-nav__count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+/* ---------- Related titles, in watch order ---------- */
+.related__heading {
+  margin: 20px 0 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.related__heading:first-child {
+  margin-top: 0;
+}
+
+.related__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.related__item {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.related__item:hover {
+  border-color: var(--accent);
+}
+
+.related__cover {
+  width: 56px;
+  aspect-ratio: 2 / 3;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--ink);
+}
+
+.related__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.related__relation {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.related__title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.related__meta {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.related__go {
+  color: var(--muted);
+}
+
+.related__you {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.related__you .material-symbols-outlined {
+  color: var(--accent);
+}
+
+.related__you strong {
+  display: block;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+/* ---------- Anime page loading skeleton ---------- */
+.series-skeleton__hero {
+  height: min(52vh, 420px);
+  border-radius: 0;
+}
+
+.series-skeleton__body {
+  display: grid;
+  gap: 14px;
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 24px var(--gutter);
+}
+
+.series-skeleton__line {
+  height: 14px;
+  border-radius: 6px;
+}
+
+.series-skeleton__line--short {
+  width: 60%;
+}
+
+.series-skeleton__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.series-skeleton__ep {
+  height: 48px;
+  border-radius: 8px;
+}
+
+/* ---------- Touch targets ---------- */
+@media (hover: none) and (pointer: coarse) {
+  .episodes__select-btn,
+  .btn,
+  .toggle,
+  .series-nav__tab,
+  .icon-btn,
+  .schedule__day,
+  .watchlist__tab {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptr.is-busy .ptr__icon {
+    animation: none;
+  }
+
+  .related__item {
+    transition: none;
+  }
+}

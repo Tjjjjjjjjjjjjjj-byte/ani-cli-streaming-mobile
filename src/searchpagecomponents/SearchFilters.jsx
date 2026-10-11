@@ -1,4 +1,5 @@
 import { getSettings } from "../store/settings";
+import { deletePreset, savePreset, usePresets } from "../store/searchStore";
 import {
   FORMAT_LABELS,
   SEARCH_FORMATS,
@@ -27,13 +28,45 @@ function FilterSelect({ label, icon, value, onChange, highlight = true, children
   );
 }
 
-function SearchFilters({ values, hasTerm, onChange, onClear }) {
+function SearchFilters({ values, hasTerm, onChange, onClear, onApply }) {
+  const presets = usePresets();
   const active = ["genre", "year", "format", "status"].filter((k) => values[k]).length;
   const sorts = SEARCH_SORTS.filter(([key]) => hasTerm || key !== "relevance");
   const sort = sorts.some(([key]) => key === values.sort) ? values.sort : sorts[0][0];
 
+  const canSave = active > 0 || Boolean(values.sort);
+
+  function handleSave() {
+    const suggestion = [values.genre, values.year, FORMAT_LABELS[values.format] ?? values.format, STATUS_LABELS[values.status] ?? values.status]
+      .filter(Boolean)
+      .join(" · ");
+    const name = window.prompt("Name this filter preset", suggestion || "My filters");
+    if (name) savePreset(name, { genre: values.genre, year: values.year, format: values.format, status: values.status, sort: values.sort });
+  }
+
   return (
     <form className="filters" aria-label="Filter results" onSubmit={(e) => e.preventDefault()}>
+      {(presets.length > 0 || canSave) && (
+        <div className="filters__presets" role="group" aria-label="Saved filters">
+          {presets.map((p) => (
+            <span className="preset" key={p.id}>
+              <button type="button" className="preset__apply" onClick={() => onApply(p)}>
+                {p.name}
+              </button>
+              <button type="button" className="preset__remove" aria-label={`Delete preset ${p.name}`} onClick={() => deletePreset(p.id)}>
+                <span className="material-symbols-outlined" aria-hidden="true">close</span>
+              </button>
+            </span>
+          ))}
+          {canSave && (
+            <button type="button" className="preset__save" onClick={handleSave}>
+              <span className="material-symbols-outlined" aria-hidden="true">bookmark_add</span>
+              Save filters
+            </button>
+          )}
+        </div>
+      )}
+
       <FilterSelect label="Genre" icon="category" value={values.genre} onChange={(v) => onChange("genre", v)}>
         <option value="">Any genre</option>
         {(getSettings().allowAdult ? [...SEARCH_GENRES, "Hentai"] : SEARCH_GENRES).map((g) => (

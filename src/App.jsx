@@ -12,11 +12,19 @@ import LibraryAnimePage from "./library/LibraryAnimePage.jsx";
 import LibraryWatchPage from "./library/LibraryWatchPage.jsx";
 import SettingsPage from "./settings/SettingsPage.jsx";
 import WatchlistPage from "./settings/WatchlistPage.jsx";
+import SchedulePage from "./settings/SchedulePage.jsx";
+import BottomNav from "./ui/BottomNav.jsx";
+import ScrollMemory from "./ui/ScrollMemory.jsx";
+import PullToRefresh from "./ui/PullToRefresh.jsx";
+import SkipLink from "./ui/SkipLink.jsx";
 
 function App() {
   if (STANDALONE) {
     return (
       <>
+        <SkipLink />
+        <ScrollMemory />
+        <PullToRefresh />
         <Navbar />
         <Routes>
           <Route path="/downloads" element={<DownloadsPage />} />
@@ -25,12 +33,16 @@ function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/downloads" replace />} />
         </Routes>
+        <BottomNav />
       </>
     );
   }
 
   return (
     <DownloadProvider>
+      <SkipLink />
+      <ScrollMemory />
+      <PullToRefresh />
       <Navbar />
       <Routes>
         <Route path="/" element={<MainHome />} />
@@ -42,8 +54,10 @@ function App() {
         <Route path="/downloads/:id" element={<LibraryAnimePage />} />
         <Route path="/downloads/:id/watch/:key" element={<LibraryWatchPage />} />
         <Route path="/list" element={<WatchlistPage />} />
+        <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
+      <BottomNav />
     </DownloadProvider>
   );
 }
