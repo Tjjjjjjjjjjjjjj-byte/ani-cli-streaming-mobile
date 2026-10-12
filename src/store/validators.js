@@ -112,3 +112,19 @@ export function validateStats(value) {
     since: typeof value.since === "string" ? value.since : null,
   };
 }
+
+// Watched-episode progress for one show (the progress:<id> key): { watched: [1, 2, ...], last }.
+export function validateProgress(value) {
+  if (!isPlainObject(value)) return null;
+  const whole = (n) => Number.isInteger(n) && n >= 0;
+  return {
+    watched: Array.isArray(value.watched) ? [...new Set(value.watched.filter(whole))].sort((a, b) => a - b) : [],
+    last: whole(value.last) ? value.last : null,
+  };
+}
+
+// A resume spot for one episode (the pos:<id>:<episode> key): { t: seconds, d: duration, at: saved-at }.
+export function validatePosition(value) {
+  if (!isPlainObject(value) || !Number.isFinite(value.t) || value.t < 0) return null;
+  return { t: value.t, d: num(value.d), at: num(value.at) };
+}

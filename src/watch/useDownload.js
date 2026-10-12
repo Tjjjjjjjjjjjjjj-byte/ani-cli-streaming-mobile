@@ -6,6 +6,16 @@ export const MAX_BATCH = 50;
 
 export const DownloadContext = createContext(null);
 
+// Episodes of a finished job worth trying again: the ones that failed, or, when the whole job
+// errored out, everything it hadn't saved yet. Empty when there is nothing to retry.
+export function retryEpisodes(job) {
+  if (job.retried) return [];
+  const done = new Set(job.done ?? []);
+  if (job.status === "error") return job.episodes.filter((n) => !done.has(n));
+  if (job.status === "done") return (job.failed ?? []).filter((n) => job.episodes.includes(n));
+  return [];
+}
+
 export function describeDownload(download) {
   const { status, title, total = 1, completed = 0, current, failed = [], error, filename, stage, bytes, lastError } = download;
   const name = title ? `${title}: ` : "";

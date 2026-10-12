@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DownloadContext, MAX_BATCH } from "./useDownload";
+import { DownloadContext, MAX_BATCH, retryEpisodes } from "./useDownload";
 import { API_BASE } from "../api";
 import { fetchDetails } from "../anilist";
 import { getSettings } from "../store/settings";
@@ -208,6 +208,46 @@ function DownloadProvider({ children }) {
     [patch],
   );
 
+  // Queue the episodes a finished job couldn't get as a fresh job. The old job is marked `retried`
+  // so its button goes away and the same episodes can't be queued twice.
+  const retry = useCallback((uid) => {
+    const job = jobsRef.current.find((j) => j.uid === uid);
+    const episodes = job ? retryEpisodes(job) : [];
+    if (episodes.length === 0) return;
+
+    const busy = new Set(
+      jobsRef.current
+        .filter((j) => !FINISHED.includes(j.status) && String(j.animeId) === String(job.animeId) && j.lang === job.lang)
+        .flatMap((j) => j.episodes),
+    );
+    const fresh = episodes.filter((n) => !busy.has(n));
+    if (fresh.length === 0) return;
+
+    setJobs((list) => [
+      ...list.map((j) => (j.uid === uid ? { ...j, retried: true } : j)),
+      {
+        uid: newUid(),
+        group: job.group,
+        animeId: job.animeId,
+        title: job.title,
+        cover: job.cover,
+        lang: job.lang,
+        episodes: fresh,
+        meta: job.meta,
+        auto: job.auto,
+        saveZip: job.saveZip,
+        status: "queued",
+        completed: 0,
+        done: [],
+        failed: [],
+      },
+    ]);
+  }, []);
+
+  const retryAll = useCallback(() => {
+    jobsRef.current.filter((j) => retryEpisodes(j).length > 0).forEach((j) => retry(j.uid));
+  }, [retry]);
+
   const refreshLibrary = useCallback(() => setLibraryVersion((v) => v + 1), []);
 
   const clearFinished = useCallback(() => setJobs((list) => list.filter((j) => !FINISHED.includes(j.status))), []);
@@ -224,11 +264,13 @@ function DownloadProvider({ children }) {
       libraryVersion,
       refreshLibrary,
       cancel,
+      retry,
+      retryAll,
       pause: (uid) => setPaused(uid, true),
       resume: (uid) => setPaused(uid, false),
       clearFinished,
     };
-  }, [active, jobs, start, enqueue, libraryVersion, refreshLibrary, cancel, setPaused, clearFinished]);
+  }, [active, jobs, start, enqueue, libraryVersion, refreshLibrary, cancel, retry, retryAll, setPaused, clearFinished]);
 
   return <DownloadContext.Provider value={value}>{children}</DownloadContext.Provider>;
 }

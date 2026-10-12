@@ -1,4 +1,4 @@
-import { useDownloadQueue } from "../watch/useDownload";
+import { retryEpisodes, useDownloadQueue } from "../watch/useDownload";
 import ProgressRing from "../watch/ProgressRing";
 import { formatBytes } from "../utils/animeFormat";
 
@@ -38,9 +38,10 @@ function detail(job) {
       return `Episode ${job.current ?? "…"}: ${doing}`;
     }
     case "done":
-      return job.failed?.length ? `Done. Episodes ${job.failed.join(", ")} failed.` : "Saved to your library.";
+      if (!job.failed?.length) return "Saved to your library.";
+      return `Done. Episodes ${job.failed.join(", ")} failed.${job.retried ? " Trying them again in a new download." : ""}`;
     case "error":
-      return job.error ?? "Something went wrong.";
+      return `${job.error ?? "Something went wrong."}${job.retried ? " Trying again in a new download." : ""}`;
     default:
       return "";
   }
@@ -72,20 +73,28 @@ function EpisodeDots({ job }) {
 }
 
 function DownloadQueue() {
-  const { jobs, pause, resume, cancel, clearFinished } = useDownloadQueue();
+  const { jobs, pause, resume, cancel, retry, retryAll, clearFinished } = useDownloadQueue();
   if (jobs.length === 0) return null;
 
   const finished = jobs.filter((j) => ["done", "error", "canceled"].includes(j.status));
+  const retryable = jobs.filter((j) => retryEpisodes(j).length > 0);
 
   return (
     <section className="queue" aria-label="Download queue">
       <header className="queue__head">
         <h3>Download queue</h3>
-        {finished.length > 0 && (
-          <button type="button" className="queue__clear" onClick={clearFinished}>
-            Clear finished
-          </button>
-        )}
+        <div className="queue__head-actions">
+          {retryable.length > 1 && (
+            <button type="button" className="queue__clear" onClick={retryAll}>
+              Retry all failed
+            </button>
+          )}
+          {finished.length > 0 && (
+            <button type="button" className="queue__clear" onClick={clearFinished}>
+              Clear finished
+            </button>
+          )}
+        </div>
       </header>
 
       <ul className="queue__list">
@@ -94,6 +103,7 @@ function DownloadQueue() {
           const progress = job.status === "done" ? 1 : total > 0 ? (job.completed ?? 0) / total : 0;
           const live = job.status === "running" || job.status === "paused" || job.status === "starting";
           const canStop = job.status === "queued" || live;
+          const toRetry = retryEpisodes(job);
           return (
             <li key={job.uid} className={`queue__job queue__job--${job.status}`}>
               <div className="queue__ring">
@@ -121,6 +131,15 @@ function DownloadQueue() {
                 <p className="queue__detail">{detail(job)}</p>
                 <EpisodeDots job={job} />
               </div>
+
+              {toRetry.length > 0 && (
+                <div className="queue__actions">
+                  <button type="button" className="btn btn--outline queue__retry" onClick={() => retry(job.uid)}>
+                    <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
+                    {toRetry.length === 1 ? `Retry episode ${toRetry[0]}` : `Retry ${toRetry.length} episodes`}
+                  </button>
+                </div>
+              )}
 
               {canStop && (
                 <div className="queue__actions">

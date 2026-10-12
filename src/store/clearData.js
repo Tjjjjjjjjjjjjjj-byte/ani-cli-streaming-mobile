@@ -6,9 +6,9 @@ import { showPrefsStore } from "./showPrefs";
 import { presetStore, recentStore } from "./searchStore";
 
 const PERSONAL_PREFIXES = ["progress:", "pos:", "player:", "episodes:"];
-const PERSONAL_KEYS = ["settings:v1", "hist:v1", "stats:v1", "watchlist:v1", "showprefs:v1", "search:recent", "search:presets"];
+const PERSONAL_KEYS = ["settings:v1", "hist:v1", "stats:v1", "watchlist:v1", "showprefs:v1", "search:recent", "search:presets", "downloads:sort"];
 
-const isPersonal = (key) => PERSONAL_KEYS.includes(key) || PERSONAL_PREFIXES.some((p) => key.startsWith(p));
+export const isPersonalKey = (key) => PERSONAL_KEYS.includes(key) || PERSONAL_PREFIXES.some((p) => key.startsWith(p));
 
 // Everything this app remembers about you, as one JSON object (AniList cache is left out).
 export function exportPersonalData() {
@@ -16,7 +16,7 @@ export function exportPersonalData() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || !isPersonal(key)) continue;
+      if (!key || !isPersonalKey(key)) continue;
       try {
         data[key] = JSON.parse(localStorage.getItem(key));
       } catch {

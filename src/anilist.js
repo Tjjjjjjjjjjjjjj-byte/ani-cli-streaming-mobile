@@ -225,7 +225,7 @@ async function loadSections(batch) {
 
 // First screen: the hero and the first rows. Everything else is fetched on demand (fetchDiscoverRows).
 async function buildDiscover() {
-  const sections = firstScreenSections();
+  const sections = firstScreenSections({ adult: allowAdult() });
   const settled = await Promise.allSettled(chunk(sections, DISCOVER_BATCH).map(loadSections));
 
   const loaded = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
@@ -266,11 +266,11 @@ export function fetchDiscover(signal) {
 // Rows below the first screen: up to DISCOVER_BATCH row ids per call (one AniList request).
 // Returns [{ id, title, items }], skipping rows that came back with too few items.
 export function fetchDiscoverRows(ids, signal) {
-  const wanted = discoverSections().filter((s) => ids.includes(s.id)).slice(0, DISCOVER_BATCH);
-  if (wanted.length === 0) return Promise.resolve([]);
   const adult = allowAdult();
+  const wanted = discoverSections({ adult }).filter((s) => ids.includes(s.id)).slice(0, DISCOVER_BATCH);
+  if (wanted.length === 0) return Promise.resolve([]);
   const job = cached(
-    `discover3:rows:${wanted.map((s) => s.id).join(",")}:${adult ? "adult" : "safe"}`,
+    `discover4:rows:${wanted.map((s) => s.id).join(",")}:${adult ? "adult" : "safe"}`,
     LIST_TTL,
     () =>
       directThenServer(

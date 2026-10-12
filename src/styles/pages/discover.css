@@ -371,6 +371,15 @@
   font-size: 48px;
 }
 
+/* A message between rows (for example "couldn't load more"), not a whole-page state. */
+.discover__message--inline {
+  margin: 8px auto 24px;
+}
+
+.discover__message--inline .material-symbols-outlined {
+  font-size: 20px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero__content,
   .skeleton {

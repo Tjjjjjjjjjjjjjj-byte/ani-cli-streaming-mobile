@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { getSettings } from "./settings";
 import { validateHistory } from "./validators";
 
-const MAX_HISTORY = 40;
+export const MAX_HISTORY = 40;
 const MIN_SAVE_SECONDS = 15;
 const FINISHED_RATIO = 0.92;
 

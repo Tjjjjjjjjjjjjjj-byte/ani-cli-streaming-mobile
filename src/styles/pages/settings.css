@@ -344,3 +344,16 @@
     transition: none;
   }
 }
+
+.settings__restore {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.settings__restore p {
+  margin: 0;
+}

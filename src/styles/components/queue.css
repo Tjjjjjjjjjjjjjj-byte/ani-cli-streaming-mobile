@@ -192,3 +192,23 @@
   display: flex;
   gap: 2px;
 }
+
+.queue__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.queue__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.queue__retry .material-symbols-outlined {
+  font-size: 18px;
+}

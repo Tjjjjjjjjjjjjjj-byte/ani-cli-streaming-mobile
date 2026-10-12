@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { STANDALONE, assetUrl } from "../api";
 import { FORMAT_LABELS, formatBytes } from "../utils/animeFormat";
@@ -6,6 +6,9 @@ import { IMPORT_EVENT, importZip, useLibrary } from "./useLibrary";
 import DownloadQueue from "./DownloadQueue";
 import { DownloadContext } from "../watch/useDownload";
 import StorageMeter from "./StorageMeter";
+import { Segmented } from "../settings/controls";
+import { SORTS, SORT_STORAGE_KEY, isSort, sortLibrary } from "./sortLibrary";
+import { readJson, writeJson } from "../store/storage";
 
 function DownloadsPage() {
   const [library, reload] = useLibrary();
@@ -21,6 +24,15 @@ function DownloadsPage() {
   const [dragging, setDragging] = useState(false);
   const [importing, setImporting] = useState(null);
   const [message, setMessage] = useState(null);
+  const [sort, setSort] = useState(() => {
+    const saved = readJson(SORT_STORAGE_KEY, "recent");
+    return isSort(saved) ? saved : "recent";
+  });
+
+  function changeSort(next) {
+    setSort(next);
+    writeJson(SORT_STORAGE_KEY, next);
+  }
 
   async function handleFile(file) {
     if (!file || importing) return;
@@ -63,7 +75,10 @@ function DownloadsPage() {
 
   const unpacking = importing && importing.progress >= 1;
   const needle = q.toLowerCase();
-  const items = needle ? library.items.filter((a) => a.title.toLowerCase().includes(needle)) : library.items;
+  const items = useMemo(() => {
+    const matching = needle ? library.items.filter((a) => a.title.toLowerCase().includes(needle)) : library.items;
+    return sortLibrary(matching, sort);
+  }, [library.items, needle, sort]);
 
   return (
     <main className="downloads-page">
@@ -143,6 +158,13 @@ function DownloadsPage() {
             ? "Nothing here yet. Import an exported anime zip above and it will show up here."
             : "Nothing saved yet. Download an episode from an anime’s page and it will show up here."}
         </p>
+      )}
+
+      {library.items.length > 1 && (
+        <div className="downloads-page__sort">
+          <span>Sort by</span>
+          <Segmented label="Sort downloads" value={sort} options={SORTS} onChange={changeSort} />
+        </div>
       )}
 
       {items.length > 0 && (

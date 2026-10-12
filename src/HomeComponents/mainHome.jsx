@@ -2,6 +2,7 @@ import Hero from "../discover/Hero";
 import Row from "../discover/Row";
 import ContinueRow from "../discover/ContinueRow";
 import BecauseRows from "../discover/BecauseRows";
+import LazyRows from "../discover/LazyRows";
 import { useDiscover } from "../discover/useDiscover";
 import RetryButton from "../ui/RetryButton";
 import { useRefreshHandler } from "../ui/PullToRefresh";
@@ -52,6 +53,7 @@ function MainHome() {
         {discover.rows.map((row) => (
           <Row key={row.id} title={row.title} items={row.items} />
         ))}
+        <LazyRows />
       </div>
     </main>
   );

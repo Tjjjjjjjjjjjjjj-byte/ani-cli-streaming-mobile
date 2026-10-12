@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { STANDALONE } from "../api";
 import { useLibrary } from "../library/useLibrary";
 import { deleteDownloads, findWatchedDownloads } from "../library/cleanup";
@@ -9,6 +9,7 @@ import { statsStore, formatDuration, summarize } from "../store/stats";
 import { useStore } from "../store/storage";
 import { clearRecentSearches } from "../store/searchStore";
 import { clearAllPersonalData, clearHistoryData, clearStatsData, exportPersonalData } from "../store/clearData";
+import { BackupError, applyBackup, readBackup } from "../store/restore";
 import { formatBytes } from "../utils/animeFormat";
 import { Row, Section, Segmented, Switch } from "./controls";
 import { BUFFER_OPTIONS, SAVE_INTERVAL_OPTIONS } from "../playback/config";
@@ -113,6 +114,8 @@ function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [wiping, setWiping] = useState(false);
+  const [backup, setBackup] = useState(null); // a checked backup file waiting for Merge / Replace
+  const backupInput = useRef(null);
 
   useEffect(() => {
     document.title = "Settings";
@@ -156,6 +159,27 @@ function SettingsPage() {
     link.download = "ani-cli-streaming-data.json";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function chooseBackup(file) {
+    if (!file) return;
+    setMessage(null);
+    try {
+      setBackup({ name: file.name, ...(await readBackup(file)) });
+    } catch (err) {
+      setBackup(null);
+      setMessage({ ok: false, text: err instanceof BackupError ? err.message : "Couldn’t read that file." });
+    }
+  }
+
+  function restoreBackup(mode) {
+    if (!backup) return;
+    if (mode === "replace" && !window.confirm("Replace everything on this device with the backup? Your current list, history and settings here will be overwritten.")) return;
+    applyBackup(backup.clean, mode);
+    setBackup(null);
+    setMessage({ ok: true, text: mode === "replace" ? "Backup restored. Reloading…" : "Backup merged in. Reloading…" });
+    // Player and episode-list choices are read when the page opens, so start fresh.
+    setTimeout(() => window.location.reload(), 900);
   }
 
   function wipeEverything() {
@@ -298,11 +322,51 @@ function SettingsPage() {
             Clear history
           </button>
         </Row>
-        <Row label="Download my data" hint="Everything this app remembers about you, as a JSON file.">
+        <Row label="Download my data" hint="Everything this app remembers about you, as a JSON file. Restore it below, on this device or another one.">
           <button type="button" className="btn btn--outline" onClick={downloadMyData}>
             Download
           </button>
         </Row>
+        <Row label="Restore from backup" hint="Pick a file from “Download my data” to bring your list, history and resume spots here, for example from your phone to your PC.">
+          <button type="button" className="btn btn--outline" onClick={() => backupInput.current?.click()}>
+            Choose file
+          </button>
+          <input
+            ref={backupInput}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(e) => {
+              chooseBackup(e.target.files[0]);
+              e.target.value = "";
+            }}
+          />
+        </Row>
+        {backup && (
+          <div className="settings__restore" role="group" aria-label="Restore options">
+            <p>
+              <strong>{backup.name}</strong> has {backup.summary.watchlist} list {backup.summary.watchlist === 1 ? "entry" : "entries"},{" "}
+              {backup.summary.history} in watch history and {backup.summary.progress} with watched episodes
+              {backup.summary.settings ? ", plus settings" : ""}
+              {backup.summary.stats ? " and stats" : ""}.
+            </p>
+            <p className="settings__hint">
+              Merge keeps what is already here and adds the rest, using the newer copy of anything in both. Your settings here stay as they are.
+              Replace makes this device match the backup exactly.
+            </p>
+            <div className="settings__confirm-actions">
+              <button type="button" className="btn btn--outline" onClick={() => restoreBackup("merge")}>
+                Merge into this device
+              </button>
+              <button type="button" className="btn btn--danger" onClick={() => restoreBackup("replace")}>
+                Replace everything
+              </button>
+              <button type="button" className="btn btn--outline" onClick={() => setBackup(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="settings__danger">
           <h3>Clear all personal data</h3>

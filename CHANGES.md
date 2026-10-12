@@ -1,5 +1,14 @@
 # What's new
 
+## Latest
+- Downloads: failed episodes can be retried. A finished job with failures gets "Retry N episodes", an errored job gets a retry for what it hadn't saved, and "Retry all failed" appears when several jobs need it.
+- Downloads page: sort by Recent, Size or Title (remembered).
+- Settings > Privacy and data: "Restore from backup" imports the file from "Download my data". Merge keeps the newer copy of each list/history entry and combines watched episodes; Replace makes the device match the backup. Everything is run through src/store/validators.js first.
+- Home: the rows below the first screen load as you scroll (they were defined but never shown). Every genre has a row, there are many more mood rows (Heartwarming = Slice of Life + Romance, Cozy, Whodunit, Neon-soaked sci-fi, ...), and with "Allow adult content" on there are extra Ecchi and Hentai rows.
+- The backend fallback for /discover now uses shared/discoverRows.js, so it matches the app, and supports /discover?rows=...
+- Removed dead code: backend/routes, backend/lib, backend/config.js (nothing imported them; backend/servers.js is the real server)
+
+## Earlier
 Continue watching row, resume inside an episode, next-episode countdown, touch gestures,
 per-show sub/dub + speed + subtitle size, subtitle controls, download queue (pause/cancel),
 auto-download next episodes + delete-after-watching, storage meter, local watchlist,

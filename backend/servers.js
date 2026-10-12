@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getLink, downloadEpisode } from "./anime.mjs";
+import { DISCOVER_BATCH, chunk, discoverSections, firstScreenSections, rowFromCards, sectionQuery } from "../shared/discoverRows.js";
 import {
   addEpisode,
   findEpisode,
@@ -372,24 +373,6 @@ app.post("/anime/:id/episode/:episode", async (req, res) => {
 
 const DISCOVER_TTL = 30 * 60_000;
 const DISCOVER_PARTIAL_TTL = 2 * 60_000;
-const DISCOVER_BATCH = 3;
-const DISCOVER_GENRES = [
-  "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
-  "Mystery", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural",
-];
-const CARD_FIELDS =
-  "id title { romaji english } coverImage { large } episodes status format seasonYear averageScore genres startDate { year month day }";
-const HERO_FIELDS = `${CARD_FIELDS} bannerImage trailer { id site } description(asHtml: false)`;
-
-function currentSeason(now = new Date()) {
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  if (month <= 1) return { season: "WINTER", year };
-  if (month <= 4) return { season: "SPRING", year };
-  if (month <= 7) return { season: "SUMMER", year };
-  if (month <= 10) return { season: "FALL", year };
-  return { season: "WINTER", year: year + 1 };
-}
 
 const toCard = (m) => ({
   id: m.id,
@@ -404,33 +387,18 @@ const toCard = (m) => ({
   releaseDate: m.startDate,
 });
 
+// One AniList request for up to DISCOVER_BATCH sections: [{ sec, media }].
+async function loadSections(batch, adult) {
+  const data = await aniList(`query { ${batch.map((sec, i) => sectionQuery(sec, i, adult)).join("\n")} }`, {});
+  return batch.map((sec, i) => ({ sec, media: data[`s${i}`].media }));
+}
+
+const cardsOf = (media) => media.filter((m) => m.coverImage?.large).map(toCard);
+
+// The hero and the first rows. The rows below the first screen come from /discover?rows=...
 async function buildDiscover(adult = false) {
-  const { season, year } = currentSeason();
-  const sections = [
-    { id: "trending", title: "Trending now", args: "sort: TRENDING_DESC", perPage: 25, hero: true },
-    { id: "season", title: "Airing this season", args: `season: ${season}, seasonYear: ${year}, sort: POPULARITY_DESC` },
-    { id: "top", title: "All-time favourites", args: "sort: SCORE_DESC" },
-    ...DISCOVER_GENRES.map((genre) => ({
-      id: `genre-${genre.toLowerCase().replaceAll(" ", "-")}`,
-      title: genre,
-      args: `genre: "${genre}", sort: POPULARITY_DESC`,
-    })),
-  ];
-
-  const batches = [];
-  for (let i = 0; i < sections.length; i += DISCOVER_BATCH) batches.push(sections.slice(i, i + DISCOVER_BATCH));
-
   const settled = await Promise.allSettled(
-    batches.map(async (batch) => {
-      const lists = batch
-        .map(
-          (sec, i) =>
-            `s${i}: Page(perPage: ${sec.perPage ?? 20}) { media(type: ANIME${adult ? "" : ", isAdult: false"}, ${sec.args}) { ${sec.hero ? HERO_FIELDS : CARD_FIELDS} } }`,
-        )
-        .join("\n");
-      const data = await aniList(`query { ${lists} }`, {});
-      return batch.map((sec, i) => ({ sec, media: data[`s${i}`].media }));
-    }),
+    chunk(firstScreenSections({ adult }), DISCOVER_BATCH).map((batch) => loadSections(batch, adult)),
   );
 
   const loaded = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
@@ -448,33 +416,45 @@ async function buildDiscover(adult = false) {
       description: cleanDescription(m.description),
     }));
 
-  const rows = loaded
-    .map(({ sec, media }) => ({
-      id: sec.id,
-      title: sec.title,
-      items: media.filter((m) => m.coverImage?.large).slice(0, 20).map(toCard),
-    }))
-    .filter((row) => row.items.length >= 4);
+  const rows = loaded.map(({ sec, media }) => rowFromCards(sec, cardsOf(media))).filter(Boolean);
 
   return { data: { hero, rows }, complete: settled.every((r) => r.status === "fulfilled") };
 }
 
-const discoverCaches = { safe: null, adult: null };
-const discoverBuildings = { safe: null, adult: null };
+// Rows below the first screen, by id (at most DISCOVER_BATCH per call).
+async function buildRows(ids, adult) {
+  const wanted = discoverSections({ adult }).filter((s) => ids.includes(s.id)).slice(0, DISCOVER_BATCH);
+  const loaded = await loadSections(wanted, adult);
+  return { rows: loaded.map(({ sec, media }) => rowFromCards(sec, cardsOf(media))).filter(Boolean) };
+}
+
+const discoverCache = new Map(); // "safe" / "adult" / "rows:<ids>:<mode>" -> { at, ttl, data }
+const discoverBuilding = new Map();
 
 app.get("/discover", async (req, res) => {
   const mode = wantsAdult(req) ? "adult" : "safe";
-  const cache = discoverCaches[mode];
+  const adult = mode === "adult";
+  const ids =
+    typeof req.query.rows === "string"
+      ? req.query.rows.split(",").map((id) => id.trim()).filter(Boolean).slice(0, DISCOVER_BATCH)
+      : null;
+  if (ids && ids.length === 0) return res.json({ rows: [] });
+
+  const key = ids ? `rows:${ids.join(",")}:${mode}` : mode;
+  const cache = discoverCache.get(key);
   if (cache && Date.now() - cache.at < cache.ttl) {
     return res.json(cache.data);
   }
 
   try {
-    discoverBuildings[mode] ??= buildDiscover(mode === "adult").finally(() => {
-      discoverBuildings[mode] = null;
-    });
-    const { data, complete } = await discoverBuildings[mode];
-    discoverCaches[mode] = { at: Date.now(), ttl: complete ? DISCOVER_TTL : DISCOVER_PARTIAL_TTL, data };
+    if (!discoverBuilding.has(key)) {
+      const job = (ids ? buildRows(ids, adult).then((data) => ({ data, complete: true })) : buildDiscover(adult)).finally(() =>
+        discoverBuilding.delete(key),
+      );
+      discoverBuilding.set(key, job);
+    }
+    const { data, complete } = await discoverBuilding.get(key);
+    discoverCache.set(key, { at: Date.now(), ttl: complete ? DISCOVER_TTL : DISCOVER_PARTIAL_TTL, data });
     res.json(data);
   } catch (error) {
     console.error("Discover failed:", error);
